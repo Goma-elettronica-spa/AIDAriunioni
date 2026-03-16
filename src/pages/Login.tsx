@@ -401,7 +401,7 @@ export default function Login() {
 
     // 3. No pre-invitation: create a join request
     const { error: joinError } = await supabase.from("join_requests").insert({
-      user_auth_id: userId,
+      user_id: userId,
       email: regEmail.trim().toLowerCase(),
       full_name: regFullName.trim(),
       tenant_id: foundTenant.id,
