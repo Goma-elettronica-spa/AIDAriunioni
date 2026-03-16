@@ -32,6 +32,10 @@ import { writeAuditLog } from "@/lib/audit";
 import { KanbanColumn } from "@/components/board/KanbanColumn";
 import { TaskCard } from "@/components/board/TaskCard";
 import { CreateTaskDialog } from "@/components/board/CreateTaskDialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export type BoardTask = {
   id: string;
