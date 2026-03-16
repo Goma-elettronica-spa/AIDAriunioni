@@ -201,7 +201,7 @@ export default function TeamPage() {
 
       // 2. Create user record in users table
       const { error: userError } = await supabase.from("users").insert({
-        id: request.user_auth_id,
+        id: request.user_id,
         email: request.email,
         full_name: request.full_name,
         role: "dirigente",
