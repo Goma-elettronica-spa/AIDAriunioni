@@ -25,6 +25,8 @@ import TeamPage from "@/pages/app/TeamPage";
 import AuditLogPage from "@/pages/app/AuditLogPage";
 import BriefPage from "@/pages/app/BriefPage";
 import MyKpisPage from "@/pages/app/MyKpisPage";
+import BoardRolesPage from "@/pages/app/BoardRolesPage";
+import KpiDashboardPage from "@/pages/app/KpiDashboardPage";
 
 const queryClient = new QueryClient();
 
@@ -77,6 +79,22 @@ const App = () => (
                 element={
                   <RoleGuard allowed={["org_admin"]}>
                     <TeamPage />
+                  </RoleGuard>
+                }
+              />
+              <Route
+                path="/board-roles"
+                element={
+                  <RoleGuard allowed={["org_admin"]}>
+                    <BoardRolesPage />
+                  </RoleGuard>
+                }
+              />
+              <Route
+                path="/kpi-dashboard"
+                element={
+                  <RoleGuard allowed={["org_admin", "information_officer"]}>
+                    <KpiDashboardPage />
                   </RoleGuard>
                 }
               />

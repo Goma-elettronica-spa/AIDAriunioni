@@ -12,6 +12,8 @@ import {
   ArrowUp,
   ArrowDown,
   Plus,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -127,6 +129,46 @@ export default function DashboardPage() {
     },
   });
 
+  // Overdue tasks
+  const today = new Date().toISOString().split("T")[0];
+  const overdueTasks = useQuery({
+    queryKey: ["dashboard-overdue-tasks", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("board_tasks")
+        .select("id, title, status, deadline_date, owner_user_id")
+        .eq("tenant_id", tenantId!)
+        .neq("status", "done")
+        .lt("deadline_date", today)
+        .order("deadline_date", { ascending: true });
+      if (error) throw error;
+      if (!data?.length) return [];
+
+      const ownerIds = [...new Set(data.map((t) => t.owner_user_id))];
+      const { data: owners } = await supabase
+        .from("users")
+        .select("id, full_name")
+        .in("id", ownerIds);
+      const ownerMap = new Map(owners?.map((o) => [o.id, o.full_name]) ?? []);
+
+      return data.map((t) => {
+        const deadlineDate = new Date(t.deadline_date);
+        const todayDate = new Date();
+        todayDate.setHours(0, 0, 0, 0);
+        deadlineDate.setHours(0, 0, 0, 0);
+        const daysOverdue = Math.floor(
+          (todayDate.getTime() - deadlineDate.getTime()) / (1000 * 60 * 60 * 24)
+        );
+        return {
+          ...t,
+          owner_name: ownerMap.get(t.owner_user_id) ?? "—",
+          days_overdue: daysOverdue,
+        };
+      }).sort((a, b) => b.days_overdue - a.days_overdue);
+    },
+  });
+
   // User's top KPIs (by largest absolute delta)
   const myTopKpis = useQuery({
     queryKey: ["dashboard-my-top-kpis", user?.id, tenantId],
@@ -237,7 +279,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Prossima Riunione */}
         <Card className="border border-border">
           <CardContent className="p-card-padding">
@@ -338,6 +380,33 @@ export default function DashboardPage() {
               </p>
             )}
             <p className="text-sm text-muted-foreground mt-1">KPI in Calo</p>
+          </CardContent>
+        </Card>
+
+        {/* Task in Ritardo */}
+        <Card className="border border-border">
+          <CardContent className="p-card-padding">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="p-2 rounded-md bg-red-50 dark:bg-red-950">
+                <AlertTriangle className="h-4 w-4 text-red-600" />
+              </div>
+            </div>
+            {overdueTasks.isLoading ? (
+              <Skeleton className="h-8 w-12 mb-1" />
+            ) : (
+              <p
+                className="text-3xl font-semibold font-mono"
+                style={{
+                  color:
+                    (overdueTasks.data?.length ?? 0) > 0
+                      ? "hsl(var(--status-stuck))"
+                      : "hsl(var(--foreground))",
+                }}
+              >
+                {overdueTasks.data?.length ?? 0}
+              </p>
+            )}
+            <p className="text-sm text-muted-foreground mt-1">Task in Ritardo</p>
           </CardContent>
         </Card>
       </div>
@@ -550,6 +619,80 @@ export default function DashboardPage() {
                         month: "short",
                       })}
                     </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Overdue Tasks */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold text-foreground">Task in Ritardo</h2>
+            {overdueTasks.data && overdueTasks.data.length > 0 && (
+              <Badge variant="destructive" className="inline-flex items-center text-xs">
+                {overdueTasks.data.length}
+              </Badge>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => navigate("/kpi-dashboard")}
+          >
+            Vedi tutti
+            <ArrowRight className="h-3.5 w-3.5 ml-1" />
+          </Button>
+        </div>
+
+        {overdueTasks.isLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : !overdueTasks.data?.length ? (
+          <Card className="border border-border">
+            <CardContent className="p-card-padding text-center py-8">
+              <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-3" />
+              <p className="text-sm font-medium text-foreground">Nessun task in ritardo</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="border border-border rounded-lg divide-y divide-border">
+            {overdueTasks.data.slice(0, 5).map((task) => {
+              const status = taskStatusConfig[task.status] ?? {
+                label: task.status,
+                dotClass: "bg-muted-foreground",
+              };
+              return (
+                <div
+                  key={task.id}
+                  className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {task.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{task.owner_name}</p>
+                  </div>
+                  <div className="flex items-center gap-4 shrink-0 ml-4">
+                    <Badge
+                      variant="destructive"
+                      className="inline-flex items-center text-xs font-mono"
+                    >
+                      {task.days_overdue}g
+                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      <StatusDot className={status.dotClass} />
+                      <span className="text-xs text-muted-foreground">
+                        {status.label}
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
