@@ -85,6 +85,14 @@ export default function SuperadminLayout() {
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-foreground/40" onClick={() => setMobileOpen(false)} />
           <aside className="relative w-60 h-full">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-3 right-3 z-50 text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10"
+              onClick={() => setMobileOpen(false)}
+            >
+              <X className="h-5 w-5" />
+            </Button>
             {sidebar}
           </aside>
         </div>
@@ -115,7 +123,7 @@ export default function SuperadminLayout() {
         </header>
 
         {/* Content */}
-        <main className="flex-1 p-6 md:p-8">
+        <main className="flex-1 p-4 sm:p-6 md:p-8">
           <Outlet />
         </main>
       </div>
