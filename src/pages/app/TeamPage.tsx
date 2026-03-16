@@ -102,7 +102,7 @@ export default function TeamPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("join_requests")
-        .select("id, user_auth_id, email, full_name, status, created_at")
+        .select("id, user_id, email, full_name, status, created_at")
         .eq("tenant_id", tenantId!)
         .eq("status", "pending")
         .order("created_at", { ascending: true });
