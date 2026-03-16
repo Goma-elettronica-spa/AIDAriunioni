@@ -31,7 +31,7 @@ const statusConfig: Record<string, { label: string; dotClass: string; order: num
   draft: { label: "Bozza", dotClass: "bg-[hsl(var(--status-todo))]", order: 0 },
   pre_meeting: { label: "Pre-Meeting", dotClass: "bg-[hsl(var(--status-waiting))]", order: 1 },
   in_progress: { label: "In Corso", dotClass: "bg-[hsl(var(--status-wip))]", order: 2 },
-  completed: { label: "Terminata", dotClass: "bg-[hsl(var(--status-done))]", order: 3 },
+  completed: { label: "Conclusa", dotClass: "bg-gray-700", order: 3 },
 };
 
 const statusFlow = ["draft", "pre_meeting", "in_progress", "completed"];
@@ -253,7 +253,7 @@ export default function MeetingsPage() {
             <SelectItem value="draft">Bozza</SelectItem>
             <SelectItem value="pre_meeting">Pre-Meeting</SelectItem>
             <SelectItem value="in_progress">In Corso</SelectItem>
-            <SelectItem value="completed">Terminata</SelectItem>
+            <SelectItem value="completed">Conclusa</SelectItem>
           </SelectContent>
         </Select>
 
@@ -325,7 +325,7 @@ export default function MeetingsPage() {
                         </h3>
                         <Badge
                           variant="secondary"
-                          className="inline-flex items-center text-xs font-normal gap-1.5"
+                          className={`inline-flex items-center text-xs font-normal gap-1.5 ${displayStatus === "completed" ? "bg-gray-100 text-gray-800" : ""}`}
                         >
                           <StatusDot className={sc.dotClass} />
                           {sc.label}
