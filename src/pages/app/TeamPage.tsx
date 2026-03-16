@@ -98,7 +98,9 @@ export default function TeamPage() {
 
   const inviteMutation = useMutation({
     mutationFn: async () => {
-      // Generate a placeholder UUID for the user (they'll get a real auth id on first login)
+      // Pre-provisioned record with placeholder UUID.
+      // When the user actually signs up via magic link, AuthCallback will
+      // reconcile this record by updating the id to match auth.users.id.
       const { error } = await supabase.from("users").insert({
         id: crypto.randomUUID(),
         email: invEmail.trim().toLowerCase(),

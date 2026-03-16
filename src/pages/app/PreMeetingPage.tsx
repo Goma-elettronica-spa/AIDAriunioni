@@ -28,6 +28,23 @@ export default function PreMeetingPage() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
+  // Check if already submitted (audit_log entry exists)
+  useEffect(() => {
+    if (!meetingId || !user) return;
+    supabase
+      .from("audit_logs")
+      .select("id")
+      .eq("entity_type", "pre_meeting_submission")
+      .eq("entity_id", meetingId)
+      .eq("user_id", user.id)
+      .eq("action", "create")
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setSubmitted(true);
+      });
+  }, [meetingId, user]);
+
   // Fetch meeting
   const meeting = useQuery({
     queryKey: ["pre-meeting", meetingId],
@@ -273,9 +290,21 @@ export default function PreMeetingPage() {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Annulla</AlertDialogCancel>
-                <AlertDialogAction onClick={() => {
-                  setSubmitted(true);
-                  toast({ title: "Pre-meeting inviato con successo" });
+                <AlertDialogAction onClick={async () => {
+                  try {
+                    const { error } = await supabase.from("audit_logs").insert({
+                      action: "create",
+                      entity_type: "pre_meeting_submission",
+                      entity_id: meetingId!,
+                      user_id: user!.id,
+                      tenant_id: meeting.data!.tenant_id,
+                    });
+                    if (error) throw error;
+                    setSubmitted(true);
+                    toast({ title: "Pre-meeting inviato con successo" });
+                  } catch (err: any) {
+                    toast({ title: "Errore nell'invio", description: err.message, variant: "destructive" });
+                  }
                 }}>
                   Conferma
                 </AlertDialogAction>

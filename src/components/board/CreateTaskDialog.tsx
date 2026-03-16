@@ -120,6 +120,7 @@ export function CreateTaskDialog({ open, onOpenChange, tenantId, currentUserId, 
         deadline_type: deadlineType,
         deadline_date: deadlineDate,
         status: "todo",
+        linked_kpi_id: linkedKpi !== "none" ? linkedKpi : null,
       });
       if (error) throw error;
     },

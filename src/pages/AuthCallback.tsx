@@ -20,12 +20,37 @@ export default function AuthCallback() {
           return;
         }
 
-        // Fetch user profile
-        const { data: profile, error: profileError } = await supabase
+        // Fetch user profile by auth id
+        let { data: profile, error: profileError } = await supabase
           .from("users")
-          .select("role, tenant_id, full_name")
+          .select("id, role, tenant_id, full_name")
           .eq("id", session.user.id)
           .maybeSingle();
+
+        // If not found by id, try to find a pre-provisioned record by email
+        if (!profile && session.user.email) {
+          const { data: emailProfile } = await supabase
+            .from("users")
+            .select("id, role, tenant_id, full_name")
+            .eq("email", session.user.email.toLowerCase())
+            .maybeSingle();
+
+          if (emailProfile && emailProfile.id !== session.user.id) {
+            // Reconcile: update the pre-provisioned record's id to match auth.users.id
+            const { error: updateError } = await supabase
+              .from("users")
+              .update({ id: session.user.id })
+              .eq("id", emailProfile.id);
+
+            if (!updateError) {
+              profile = { ...emailProfile, id: session.user.id };
+              profileError = null;
+            }
+          } else if (emailProfile) {
+            profile = emailProfile;
+            profileError = null;
+          }
+        }
 
         if (profileError || !profile) {
           setError("Account non autorizzato");

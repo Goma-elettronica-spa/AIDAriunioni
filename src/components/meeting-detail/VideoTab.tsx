@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,13 +23,15 @@ export function VideoTab({ meeting, isAdmin }: Props) {
   const transcriptInputRef = useRef<HTMLInputElement>(null);
 
   // Load transcript text if URL exists
-  if (meeting.transcript_url && !transcriptLoaded) {
-    setTranscriptLoaded(true);
-    fetch(meeting.transcript_url)
-      .then((r) => r.text())
-      .then(setTranscript)
-      .catch(() => setTranscript("Errore nel caricamento della trascrizione."));
-  }
+  useEffect(() => {
+    if (meeting.transcript_url) {
+      setTranscriptLoaded(true);
+      fetch(meeting.transcript_url)
+        .then((r) => r.text())
+        .then(setTranscript)
+        .catch(() => setTranscript("Errore nel caricamento della trascrizione."));
+    }
+  }, [meeting.transcript_url]);
 
   const uploadFile = useCallback(
     async (file: File, bucket: string, field: "video_url" | "transcript_url") => {
