@@ -10,6 +10,7 @@ const navItems = [
   { title: "Tenant", url: "/superadmin/tenants", icon: Building2 },
   { title: "Permessi", url: "/superadmin/permissions", icon: ShieldCheck },
   { title: "Analytics", url: "/superadmin/analytics", icon: BarChart3 },
+  { title: "Audit Log", url: "/superadmin/audit-log", icon: Eye },
 ];
 
 export default function SuperadminLayout() {
