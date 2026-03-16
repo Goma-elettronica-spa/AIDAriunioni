@@ -511,6 +511,7 @@ export type Database = {
           created_at: string
           description: string | null
           direction: string
+          functional_area_id: string | null
           id: string
           is_active: boolean
           is_required: boolean
@@ -519,12 +520,13 @@ export type Database = {
           tenant_id: string
           unit: string
           updated_at: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
           description?: string | null
           direction?: string
+          functional_area_id?: string | null
           id?: string
           is_active?: boolean
           is_required?: boolean
@@ -533,12 +535,13 @@ export type Database = {
           tenant_id: string
           unit: string
           updated_at?: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
           description?: string | null
           direction?: string
+          functional_area_id?: string | null
           id?: string
           is_active?: boolean
           is_required?: boolean
@@ -547,9 +550,16 @@ export type Database = {
           tenant_id?: string
           unit?: string
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "kpi_definitions_functional_area_id_fkey"
+            columns: ["functional_area_id"]
+            isOneToOne: false
+            referencedRelation: "functional_areas"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "kpi_definitions_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -1038,6 +1048,96 @@ export type Database = {
           vat_number?: string
         }
         Relationships: []
+      }
+      upgrade_requests: {
+        Row: {
+          created_at: string
+          created_by_user_id: string
+          description: string | null
+          id: string
+          linked_kpi_id: string | null
+          meeting_id: string | null
+          owner_user_id: string
+          position: number
+          reason_why: string
+          status: string
+          tenant_id: string
+          title: string
+          updated_at: string
+          value_amount: number
+          value_unit: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_user_id: string
+          description?: string | null
+          id?: string
+          linked_kpi_id?: string | null
+          meeting_id?: string | null
+          owner_user_id: string
+          position?: number
+          reason_why: string
+          status?: string
+          tenant_id: string
+          title: string
+          updated_at?: string
+          value_amount?: number
+          value_unit: string
+        }
+        Update: {
+          created_at?: string
+          created_by_user_id?: string
+          description?: string | null
+          id?: string
+          linked_kpi_id?: string | null
+          meeting_id?: string | null
+          owner_user_id?: string
+          position?: number
+          reason_why?: string
+          status?: string
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+          value_amount?: number
+          value_unit?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upgrade_requests_created_by_user_id_fkey"
+            columns: ["created_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upgrade_requests_linked_kpi_id_fkey"
+            columns: ["linked_kpi_id"]
+            isOneToOne: false
+            referencedRelation: "kpi_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upgrade_requests_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upgrade_requests_owner_user_id_fkey"
+            columns: ["owner_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upgrade_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_functional_areas: {
         Row: {
