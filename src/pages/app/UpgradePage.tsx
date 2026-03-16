@@ -15,7 +15,7 @@ import {
 import { useDroppable } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Lightbulb, TrendingUp, Scissors, Link2 } from "lucide-react";
+import { Lightbulb, TrendingUp, Scissors, Link2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -57,8 +57,13 @@ type UpgradeRequest = {
   description: string | null;
   linked_kpi_id: string | null;
   reason_why: "revenue_generation" | "cost_cutting";
-  value_unit: "money" | "license_cost" | "man_hours";
+  value_unit: string;
   value_amount: number;
+  reviewed_value_unit: string | null;
+  reviewed_value_amount: number | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
   status: string;
   position: number;
   created_at: string;
@@ -78,6 +83,7 @@ const columns = [
   { id: "done", label: "Done", color: "var(--status-done)" },
   { id: "stuck", label: "Stuck", color: "var(--status-stuck)" },
   { id: "waiting_for", label: "Waiting For", color: "var(--status-waiting)" },
+  { id: "rejected", label: "Rejected", color: "#991B1B" },
 ];
 
 // ---------- Helpers ----------
@@ -90,13 +96,12 @@ function ownerColor(userId: string): string {
   return `hsl(${hue}, 55%, 45%)`;
 }
 
-function formatValue(unit: string, amount: number): string {
-  const fmt = (n: number) =>
-    n.toLocaleString("it-IT", { maximumFractionDigits: 0 });
-  if (unit === "money") return `\u20AC${fmt(amount)}`;
-  if (unit === "license_cost") return `\u20AC${fmt(amount)}/anno`;
-  if (unit === "man_hours") return `${fmt(amount)} ore`;
-  return String(amount);
+function formatValue(amount: number, unit: string): string {
+  const fmt = amount.toLocaleString("it-IT", { maximumFractionDigits: 0 });
+  if (unit === "money") return `\u20AC${fmt}`;
+  if (unit === "license_cost") return `\u20AC${fmt}/anno`;
+  if (unit === "man_hours") return `${fmt} ore`;
+  return `${fmt} ${unit}`;
 }
 
 const reasonLabels: Record<string, string> = {
@@ -110,6 +115,7 @@ const statusLabels: Record<string, string> = {
   done: "Done",
   stuck: "Stuck",
   waiting_for: "Waiting For",
+  rejected: "Rejected",
 };
 
 // ---------- UpgradeCardComponent ----------
@@ -139,6 +145,9 @@ function UpgradeCardComponent({
     .join("")
     .slice(0, 2)
     .toUpperCase();
+
+  const hasReview =
+    card.reviewed_value_amount != null && card.reviewed_value_amount !== undefined;
 
   return (
     <div
@@ -199,9 +208,21 @@ function UpgradeCardComponent({
       </div>
 
       {/* Valore aggiunto */}
-      <p className="text-xs font-semibold text-foreground">
-        {formatValue(card.value_unit, card.value_amount)}
-      </p>
+      {hasReview ? (
+        <div className="space-y-0.5">
+          <p className="text-xs text-muted-foreground line-through">
+            {formatValue(card.value_amount, card.value_unit)}
+          </p>
+          <p className="text-xs font-bold text-foreground">
+            {formatValue(card.reviewed_value_amount!, card.reviewed_value_unit ?? card.value_unit)}{" "}
+            <span className="font-normal text-muted-foreground">(rivisto)</span>
+          </p>
+        </div>
+      ) : (
+        <p className="text-xs font-semibold text-foreground">
+          {formatValue(card.value_amount, card.value_unit)}
+        </p>
+      )}
 
       {/* Description */}
       {card.description && (
@@ -229,6 +250,11 @@ function UpgradeKanbanColumn({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
+  const isHslColor = column.color.startsWith("var(");
+  const barStyle = isHslColor
+    ? { backgroundColor: `hsl(${column.color})` }
+    : { backgroundColor: column.color };
+
   return (
     <div
       ref={setNodeRef}
@@ -239,7 +265,7 @@ function UpgradeKanbanColumn({
       <div className="flex items-center gap-2 mb-3 px-1">
         <div
           className="w-1 h-5 rounded-full shrink-0"
-          style={{ backgroundColor: `hsl(${column.color})` }}
+          style={barStyle}
         />
         <h3 className="text-sm font-semibold text-foreground">{column.label}</h3>
         <span className="text-xs text-muted-foreground font-mono ml-auto">
@@ -271,8 +297,9 @@ export default function UpgradePage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const tenantId = user?.tenant_id;
-  const canDragAny =
+  const isIOAdmin =
     user?.role === "org_admin" || user?.role === "information_officer";
+  const canDragAny = isIOAdmin;
 
   // Filters
   const [ownerFilter, setOwnerFilter] = useState("all");
@@ -284,14 +311,11 @@ export default function UpgradePage() {
   const [activeCard, setActiveCard] = useState<UpgradeCard | null>(null);
   const [selectedCard, setSelectedCard] = useState<UpgradeCard | null>(null);
 
-  // Sheet edit state
-  const [editTitle, setEditTitle] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [editOwnerId, setEditOwnerId] = useState("");
-  const [editLinkedKpi, setEditLinkedKpi] = useState("none");
-  const [editReasonWhy, setEditReasonWhy] = useState<string>("revenue_generation");
-  const [editValueUnit, setEditValueUnit] = useState<string>("money");
-  const [editValueAmount, setEditValueAmount] = useState<number>(0);
+  // Sheet edit state (IO/Admin fields)
+  const [editReviewedValueUnit, setEditReviewedValueUnit] = useState<string>("");
+  const [editReviewedValueAmount, setEditReviewedValueAmount] = useState<string>("");
+  const [editReviewNote, setEditReviewNote] = useState("");
+  const [editStatus, setEditStatus] = useState("");
 
   // Create dialog state
   const [newTitle, setNewTitle] = useState("");
@@ -313,7 +337,7 @@ export default function UpgradePage() {
     queryFn: async () => {
       const { data, error } = await (supabase.from as any)("upgrade_requests")
         .select(
-          "id, tenant_id, meeting_id, created_by_user_id, owner_user_id, title, description, linked_kpi_id, reason_why, value_unit, value_amount, status, position, created_at, updated_at"
+          "id, tenant_id, meeting_id, created_by_user_id, owner_user_id, title, description, linked_kpi_id, reason_why, value_unit, value_amount, reviewed_value_unit, reviewed_value_amount, reviewed_by, reviewed_at, review_note, status, position, created_at, updated_at"
         )
         .eq("tenant_id", tenantId!);
       if (error) throw error;
@@ -388,6 +412,18 @@ export default function UpgradePage() {
     },
   });
 
+  const valueOptions = useQuery({
+    queryKey: ["value-unit-options", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data } = await (supabase.from as any)("value_unit_options")
+        .select("*")
+        .or(`tenant_id.eq.${tenantId},is_global.eq.true`)
+        .order("label");
+      return data ?? [];
+    },
+  });
+
   // ---------- Reset create dialog on open ----------
   useEffect(() => {
     if (createOpen) {
@@ -429,7 +465,11 @@ export default function UpgradePage() {
     let revenue = 0;
     let savings = 0;
     let hours = 0;
+    let rejectedCount = 0;
     for (const c of all) {
+      if (c.status === "rejected") {
+        rejectedCount++;
+      }
       if (c.reason_why === "revenue_generation") {
         if (c.value_unit === "man_hours") hours += c.value_amount;
         else revenue += c.value_amount;
@@ -438,7 +478,7 @@ export default function UpgradePage() {
         else savings += c.value_amount;
       }
     }
-    return { total: all.length, revenue, savings, hours };
+    return { total: all.length, revenue, savings, hours, rejectedCount };
   }, [filtered]);
 
   // ---------- Mutations ----------
@@ -509,19 +549,23 @@ export default function UpgradePage() {
     },
   });
 
-  const updateMutation = useMutation({
+  const reviewMutation = useMutation({
     mutationFn: async () => {
       if (!selectedCard) return;
+      const reviewedAmount = parseFloat(editReviewedValueAmount);
+      const hasReviewedValue = !isNaN(reviewedAmount) && editReviewedValueUnit;
+      const updatePayload: Record<string, unknown> = {
+        status: editStatus,
+        review_note: editReviewNote.trim() || null,
+      };
+      if (hasReviewedValue) {
+        updatePayload.reviewed_value_unit = editReviewedValueUnit;
+        updatePayload.reviewed_value_amount = reviewedAmount;
+        updatePayload.reviewed_by = user?.id;
+        updatePayload.reviewed_at = new Date().toISOString();
+      }
       const { error } = await (supabase.from as any)("upgrade_requests")
-        .update({
-          title: editTitle.trim(),
-          description: editDescription.trim() || null,
-          owner_user_id: editOwnerId,
-          linked_kpi_id: editLinkedKpi !== "none" ? editLinkedKpi : null,
-          reason_why: editReasonWhy,
-          value_unit: editValueUnit,
-          value_amount: editValueAmount,
-        })
+        .update(updatePayload)
         .eq("id", selectedCard.id);
       if (error) throw error;
     },
@@ -535,14 +579,13 @@ export default function UpgradePage() {
           entityType: "upgrade_request",
           entityId: selectedCard.id,
           oldValues: {
-            title: selectedCard.title,
-            owner_user_id: selectedCard.owner_user_id,
-            reason_why: selectedCard.reason_why,
+            status: selectedCard.status,
+            reviewed_value_amount: selectedCard.reviewed_value_amount,
           },
           newValues: {
-            title: editTitle.trim(),
-            owner_user_id: editOwnerId,
-            reason_why: editReasonWhy,
+            status: editStatus,
+            reviewed_value_amount: parseFloat(editReviewedValueAmount) || null,
+            review_note: editReviewNote.trim() || null,
           },
         });
       }
@@ -600,25 +643,72 @@ export default function UpgradePage() {
   // ---------- Open detail sheet ----------
   const openCardDetail = useCallback((card: UpgradeCard) => {
     setSelectedCard(card);
-    setEditTitle(card.title);
-    setEditDescription(card.description ?? "");
-    setEditOwnerId(card.owner_user_id);
-    setEditLinkedKpi(card.linked_kpi_id ?? "none");
-    setEditReasonWhy(card.reason_why);
-    setEditValueUnit(card.value_unit);
-    setEditValueAmount(card.value_amount);
+    setEditReviewedValueUnit(card.reviewed_value_unit ?? card.value_unit);
+    setEditReviewedValueAmount(
+      card.reviewed_value_amount != null ? String(card.reviewed_value_amount) : ""
+    );
+    setEditReviewNote(card.review_note ?? "");
+    setEditStatus(card.status);
   }, []);
 
-  const canEdit = useMemo(() => {
-    if (!selectedCard || !user) return false;
-    if (user.role === "org_admin" || user.role === "information_officer")
-      return true;
-    return selectedCard.created_by_user_id === user.id;
-  }, [selectedCard, user]);
+  // ---------- Download .md ----------
+  const downloadMarkdown = useCallback(
+    (card: UpgradeCard) => {
+      const reviewedLine =
+        card.reviewed_value_amount != null
+          ? `${formatValue(card.reviewed_value_amount, card.reviewed_value_unit ?? card.value_unit)}`
+          : "Non ancora rivista";
+      const md = `# ${card.title}
+
+## Dettagli
+- **Owner**: ${card.owner_name}
+- **KPI**: ${card.kpi_name ?? "Nessuna"}
+- **Reason Why**: ${reasonLabels[card.reason_why] ?? card.reason_why}
+- **Area Funzionale**: ${card.kpi_area ?? "N/A"}
+
+## Valore Aggiunto
+- **Stima originale**: ${formatValue(card.value_amount, card.value_unit)}
+- **Stima rivista**: ${reviewedLine}
+
+## Descrizione
+${card.description ?? "Nessuna descrizione"}
+
+## Note IO
+${card.review_note ?? "Nessuna nota"}
+
+## Status
+${statusLabels[card.status] ?? card.status}
+
+---
+Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
+`;
+      const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${card.title.replace(/[^a-zA-Z0-9]/g, "_")}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    []
+  );
 
   // ---------- Format summary values ----------
   const fmtEur = (n: number) =>
     `\u20AC${n.toLocaleString("it-IT", { maximumFractionDigits: 0 })}`;
+
+  // ---------- Value unit options for selects ----------
+  const unitSelectOptions = useMemo(() => {
+    if (valueOptions.data && valueOptions.data.length > 0) {
+      return valueOptions.data as { value: string; label: string }[];
+    }
+    // Fallback if table is empty
+    return [
+      { value: "money", label: "Soldi (\u20AC)" },
+      { value: "license_cost", label: "Costo Licenza (\u20AC/anno)" },
+      { value: "man_hours", label: "Ore Uomo" },
+    ];
+  }, [valueOptions.data]);
 
   return (
     <div className="space-y-6">
@@ -697,6 +787,14 @@ export default function UpgradePage() {
             <span className="text-muted-foreground">|</span>
             <span className="text-foreground font-medium">
               Ore: {summary.hours.toLocaleString("it-IT")}
+            </span>
+          </>
+        )}
+        {summary.rejectedCount > 0 && (
+          <>
+            <span className="text-muted-foreground">|</span>
+            <span className="text-red-800 font-medium">
+              Rejected: {summary.rejectedCount}
             </span>
           </>
         )}
@@ -850,39 +948,18 @@ export default function UpgradePage() {
             {/* Valore aggiunto */}
             <div className="space-y-2">
               <Label>Valore aggiunto</Label>
-              <RadioGroup
-                value={newValueUnit}
-                onValueChange={setNewValueUnit}
-                className="space-y-2"
-              >
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="money" id="new-unit-money" />
-                  <Label
-                    htmlFor="new-unit-money"
-                    className="font-normal text-sm cursor-pointer"
-                  >
-                    Soldi (&euro;)
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="license_cost" id="new-unit-license" />
-                  <Label
-                    htmlFor="new-unit-license"
-                    className="font-normal text-sm cursor-pointer"
-                  >
-                    Costo Licenza (&euro;/anno)
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="man_hours" id="new-unit-hours" />
-                  <Label
-                    htmlFor="new-unit-hours"
-                    className="font-normal text-sm cursor-pointer"
-                  >
-                    Ore Uomo
-                  </Label>
-                </div>
-              </RadioGroup>
+              <Select value={newValueUnit} onValueChange={setNewValueUnit}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona unita" />
+                </SelectTrigger>
+                <SelectContent>
+                  {unitSelectOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Input
                 type="number"
                 value={newValueAmount}
@@ -917,7 +994,7 @@ export default function UpgradePage() {
         </DialogContent>
       </Dialog>
 
-      {/* Detail Sheet */}
+      {/* Detail Sheet (right side) */}
       <Sheet
         open={!!selectedCard}
         onOpenChange={(open) => !open && setSelectedCard(null)}
@@ -932,220 +1009,186 @@ export default function UpgradePage() {
 
           {selectedCard && (
             <div className="space-y-5 mt-6">
-              {/* Title */}
+              {/* Title (read-only for all) */}
               <div className="space-y-2">
                 <Label>Titolo</Label>
-                {canEdit ? (
-                  <Input
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                  />
-                ) : (
-                  <p className="text-sm text-foreground">{editTitle}</p>
-                )}
+                <p className="text-sm font-bold text-foreground">{selectedCard.title}</p>
               </div>
 
-              {/* Description */}
+              {/* Description (read-only for all) */}
               <div className="space-y-2">
                 <Label>Descrizione</Label>
-                {canEdit ? (
-                  <Textarea
-                    value={editDescription}
-                    onChange={(e) => setEditDescription(e.target.value)}
-                    placeholder="Nessuna descrizione"
-                    rows={3}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {editDescription || "Nessuna descrizione"}
-                  </p>
-                )}
+                <p className="text-sm text-muted-foreground">
+                  {selectedCard.description || "Nessuna descrizione"}
+                </p>
               </div>
 
-              {/* Owner */}
+              {/* Owner (read-only for all) */}
               <div className="space-y-2">
                 <Label>Owner</Label>
-                {canEdit ? (
-                  <Select value={editOwnerId} onValueChange={setEditOwnerId}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {tenantUsers.data?.map((u) => (
-                        <SelectItem key={u.id} value={u.id}>
-                          {u.full_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className="text-sm text-foreground">
-                    {selectedCard.owner_name}
-                  </p>
-                )}
+                <p className="text-sm text-foreground">
+                  {selectedCard.owner_name}
+                </p>
               </div>
 
-              {/* KPI collegata */}
+              {/* KPI collegata (read-only for all) */}
               <div className="space-y-2">
                 <Label>KPI Collegata</Label>
-                {canEdit ? (
-                  <Select
-                    value={editLinkedKpi}
-                    onValueChange={setEditLinkedKpi}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Nessuno" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Nessuno</SelectItem>
-                      {kpiDefinitions.data?.map((k) => (
-                        <SelectItem key={k.id} value={k.id}>
-                          {k.area ? `${k.area}: ${k.name}` : k.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className="text-sm text-foreground">
-                    {selectedCard.kpi_name ?? "Nessuno"}
-                  </p>
-                )}
+                <p className="text-sm text-foreground">
+                  {selectedCard.kpi_name ?? "Nessuno"}
+                </p>
               </div>
 
-              {/* Reason Why */}
+              {/* Reason Why (read-only for all) */}
               <div className="space-y-2">
                 <Label>Reason Why</Label>
-                {canEdit ? (
-                  <RadioGroup
-                    value={editReasonWhy}
-                    onValueChange={setEditReasonWhy}
-                    className="space-y-2"
-                  >
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem
-                        value="revenue_generation"
-                        id="edit-reason-revenue"
-                      />
-                      <Label
-                        htmlFor="edit-reason-revenue"
-                        className="font-normal text-sm cursor-pointer"
-                      >
-                        Revenue Generation
-                      </Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem
-                        value="cost_cutting"
-                        id="edit-reason-cost"
-                      />
-                      <Label
-                        htmlFor="edit-reason-cost"
-                        className="font-normal text-sm cursor-pointer"
-                      >
-                        Cost Cutting
-                      </Label>
-                    </div>
-                  </RadioGroup>
-                ) : (
-                  <div>
-                    {editReasonWhy === "revenue_generation" ? (
-                      <Badge className="inline-flex items-center gap-1 bg-green-50 text-green-700 border-green-200">
-                        <TrendingUp className="h-3 w-3" />
-                        Revenue Generation
-                      </Badge>
-                    ) : (
-                      <Badge className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border-blue-200">
-                        <Scissors className="h-3 w-3" />
-                        Cost Cutting
-                      </Badge>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Valore aggiunto */}
-              <div className="space-y-2">
-                <Label>Valore aggiunto</Label>
-                {canEdit ? (
-                  <>
-                    <RadioGroup
-                      value={editValueUnit}
-                      onValueChange={setEditValueUnit}
-                      className="space-y-2"
-                    >
-                      <div className="flex items-center gap-2">
-                        <RadioGroupItem value="money" id="edit-unit-money" />
-                        <Label
-                          htmlFor="edit-unit-money"
-                          className="font-normal text-sm cursor-pointer"
-                        >
-                          Soldi (&euro;)
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <RadioGroupItem
-                          value="license_cost"
-                          id="edit-unit-license"
-                        />
-                        <Label
-                          htmlFor="edit-unit-license"
-                          className="font-normal text-sm cursor-pointer"
-                        >
-                          Costo Licenza (&euro;/anno)
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <RadioGroupItem
-                          value="man_hours"
-                          id="edit-unit-hours"
-                        />
-                        <Label
-                          htmlFor="edit-unit-hours"
-                          className="font-normal text-sm cursor-pointer"
-                        >
-                          Ore Uomo
-                        </Label>
-                      </div>
-                    </RadioGroup>
-                    <Input
-                      type="number"
-                      value={editValueAmount}
-                      onChange={(e) =>
-                        setEditValueAmount(parseFloat(e.target.value) || 0)
-                      }
-                      min={0}
-                    />
-                  </>
-                ) : (
-                  <p className="text-sm font-semibold text-foreground">
-                    {formatValue(editValueUnit, editValueAmount)}
-                  </p>
-                )}
-              </div>
-
-              {/* Status (read-only) */}
-              <div className="space-y-2">
-                <Label>Stato</Label>
                 <div>
-                  <Badge
-                    variant="secondary"
-                    className="inline-flex items-center text-xs"
-                  >
-                    {statusLabels[selectedCard.status] ?? selectedCard.status}
-                  </Badge>
+                  {selectedCard.reason_why === "revenue_generation" ? (
+                    <Badge className="inline-flex items-center gap-1 bg-green-50 text-green-700 border-green-200">
+                      <TrendingUp className="h-3 w-3" />
+                      Revenue Generation
+                    </Badge>
+                  ) : (
+                    <Badge className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border-blue-200">
+                      <Scissors className="h-3 w-3" />
+                      Cost Cutting
+                    </Badge>
+                  )}
                 </div>
               </div>
 
-              {/* Save button */}
-              {canEdit && (
-                <Button
-                  className="w-full"
-                  onClick={() => updateMutation.mutate()}
-                  disabled={updateMutation.isPending || !editTitle.trim()}
-                >
-                  {updateMutation.isPending ? "Salvataggio..." : "Salva"}
-                </Button>
+              {/* Original value (read-only for all) */}
+              <div className="space-y-2">
+                <Label>Valore originale</Label>
+                <p className="text-sm font-semibold text-foreground">
+                  {formatValue(selectedCard.value_amount, selectedCard.value_unit)}
+                </p>
+              </div>
+
+              {/* Reviewed value display (read-only, visible if reviewed) */}
+              {selectedCard.reviewed_value_amount != null && !isIOAdmin && (
+                <div className="space-y-2">
+                  <Label>Valore rivisto</Label>
+                  <p className="text-sm font-bold text-foreground">
+                    {formatValue(
+                      selectedCard.reviewed_value_amount,
+                      selectedCard.reviewed_value_unit ?? selectedCard.value_unit
+                    )}
+                  </p>
+                </div>
               )}
+
+              {/* Status (read-only for non IO/admin) */}
+              {!isIOAdmin && (
+                <div className="space-y-2">
+                  <Label>Stato</Label>
+                  <div>
+                    <Badge
+                      variant="secondary"
+                      className="inline-flex items-center text-xs"
+                    >
+                      {statusLabels[selectedCard.status] ?? selectedCard.status}
+                    </Badge>
+                  </div>
+                </div>
+              )}
+
+              {/* IO/Admin editable fields */}
+              {isIOAdmin && (
+                <>
+                  <div className="border-t border-border pt-4 space-y-4">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Revisione IO
+                    </p>
+
+                    {/* Reviewed value */}
+                    <div className="space-y-2">
+                      <Label>Valore rivisto</Label>
+                      <Select
+                        value={editReviewedValueUnit}
+                        onValueChange={setEditReviewedValueUnit}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleziona unita" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {unitSelectOptions.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        value={editReviewedValueAmount}
+                        onChange={(e) => setEditReviewedValueAmount(e.target.value)}
+                        placeholder="Importo rivisto"
+                        min={0}
+                      />
+                    </div>
+
+                    {/* Review note */}
+                    <div className="space-y-2">
+                      <Label>Note IO</Label>
+                      <Textarea
+                        value={editReviewNote}
+                        onChange={(e) => setEditReviewNote(e.target.value)}
+                        placeholder="Commenti sulla revisione"
+                        rows={3}
+                      />
+                    </div>
+
+                    {/* Status */}
+                    <div className="space-y-2">
+                      <Label>Stato</Label>
+                      <Select value={editStatus} onValueChange={setEditStatus}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {columns.map((col) => (
+                            <SelectItem key={col.id} value={col.id}>
+                              {col.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Save button */}
+                    <Button
+                      className="w-full"
+                      onClick={() => reviewMutation.mutate()}
+                      disabled={reviewMutation.isPending}
+                    >
+                      {reviewMutation.isPending ? "Salvataggio..." : "Salva"}
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {/* Review note display for non-IO users */}
+              {!isIOAdmin && selectedCard.review_note && (
+                <div className="space-y-2">
+                  <Label>Note IO</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedCard.review_note}
+                  </p>
+                </div>
+              )}
+
+              {/* Download .md button */}
+              <div className="border-t border-border pt-4">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => downloadMarkdown(selectedCard)}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Scarica .md
+                </Button>
+              </div>
             </div>
           )}
         </SheetContent>
