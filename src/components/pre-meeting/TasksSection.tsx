@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, AlertTriangle } from "lucide-react";
 
 interface Props {
   meetingId: string;
@@ -261,6 +261,14 @@ export function TasksSection({
           <p className="text-sm text-muted-foreground text-center py-4">
             Nessun task aggiunto
           </p>
+        )}
+        {!readOnly && tasks.filter((t) => t.title.trim()).length < 3 && (
+          <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-6 dark:border-amber-900 dark:bg-amber-950/30">
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              Crea almeno 3 task per completare la preparazione ({tasks.filter((t) => t.title.trim()).length}/3)
+            </p>
+          </div>
         )}
         {!readOnly && (
           <Button variant="ghost" size="sm" className="text-xs" onClick={addTask}>

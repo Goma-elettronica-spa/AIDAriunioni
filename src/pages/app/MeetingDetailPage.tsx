@@ -3,11 +3,15 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { ArrowLeft, ChevronRight, Loader2, Sparkles, Pencil } from "lucide-react";
+import {
+  ArrowLeft, ChevronRight, Loader2, Sparkles, Pencil,
+  Check, X, AlertTriangle, FileText, ListTodo, BarChart3,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
@@ -25,6 +29,15 @@ const statusConfig: Record<string, { label: string; dotClass: string }> = {
   completed: { label: "Conclusa", dotClass: "bg-gray-700" },
 };
 const statusFlow = ["draft", "pre_meeting", "in_progress", "completed"];
+
+interface GateStatus {
+  hasSlideUpload: boolean;
+  kpiCount: number;
+  requiredKpiTotal: number;
+  requiredKpiFilled: number;
+  taskCount: number;
+  hasAssignedKpis: boolean;
+}
 
 export default function MeetingDetailPage() {
   const { id: meetingId } = useParams<{ id: string }>();
@@ -54,6 +67,87 @@ export default function MeetingDetailPage() {
         .maybeSingle();
       if (error) throw error;
       return data;
+    },
+  });
+
+  // Determine if the meeting is in the future and the user is gated
+  const isFuture = meeting.data
+    ? new Date(meeting.data.scheduled_date) >= new Date(new Date().toDateString())
+    : false;
+  const isGated = isFuture && !isAdmin;
+
+  // Fetch gate completion status for non-admin users on future meetings
+  const gateStatus = useQuery<GateStatus>({
+    queryKey: ["meeting-gate", meetingId, user?.id],
+    enabled: !!meetingId && !!user?.id && isGated,
+    queryFn: async () => {
+      const uid = user!.id;
+      const mid = meetingId!;
+
+      // 1. Check slide_uploads
+      const { count: slideCount } = await supabase
+        .from("slide_uploads")
+        .select("id", { count: "exact", head: true })
+        .eq("meeting_id", mid)
+        .eq("user_id", uid);
+
+      // 2. Count kpi_entries for this meeting/user
+      const { count: kpiCount } = await supabase
+        .from("kpi_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("meeting_id", mid)
+        .eq("user_id", uid);
+
+      // 3. Get user's functional areas then required KPIs
+      const { data: userAreas } = await supabase
+        .from("user_functional_areas")
+        .select("functional_area_id")
+        .eq("user_id", uid);
+
+      let requiredKpiTotal = 0;
+      let requiredKpiFilled = 0;
+      const hasAssignedKpis = (userAreas?.length ?? 0) > 0;
+
+      if (userAreas && userAreas.length > 0) {
+        const areaIds = userAreas.map((a) => a.functional_area_id);
+
+        const { data: requiredKpis } = await supabase
+          .from("kpi_definitions")
+          .select("id")
+          .in("functional_area_id", areaIds)
+          .eq("is_active", true)
+          .eq("is_required", true);
+
+        requiredKpiTotal = requiredKpis?.length ?? 0;
+
+        if (requiredKpiTotal > 0) {
+          const requiredKpiIds = requiredKpis!.map((k) => k.id);
+          const { count: filledCount } = await supabase
+            .from("kpi_entries")
+            .select("id", { count: "exact", head: true })
+            .eq("meeting_id", mid)
+            .eq("user_id", uid)
+            .in("kpi_definition_id", requiredKpiIds);
+          requiredKpiFilled = filledCount ?? 0;
+        }
+      }
+
+      // 4. Count board_tasks with source='pre_meeting' for this meeting
+      const { count: taskCount } = await supabase
+        .from("board_tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("meeting_id", mid)
+        .eq("created_by_user_id", uid)
+        .eq("source", "pre_meeting");
+
+      return {
+        hasSlideUpload: (slideCount ?? 0) > 0,
+        kpiCount: kpiCount ?? 0,
+        requiredKpiTotal,
+        requiredKpiFilled,
+        taskCount: taskCount ?? 0,
+        hasAssignedKpis,
+      };
     },
   });
 
@@ -132,6 +226,16 @@ export default function MeetingDetailPage() {
   const nextStatus = nextIdx < statusFlow.length ? statusFlow[nextIdx] : null;
   const hasTranscriptOrSummary = !!(m.transcript_url || m.summary_text);
 
+  // Gate check: determine if all requirements are met
+  const gs = gateStatus.data;
+  const allRequirementsMet = gs
+    ? gs.hasSlideUpload &&
+      gs.kpiCount >= 3 &&
+      gs.taskCount >= 3 &&
+      (gs.requiredKpiTotal === 0 || gs.requiredKpiFilled >= gs.requiredKpiTotal)
+    : false;
+  const showGate = isGated && !allRequirementsMet && !gateStatus.isLoading;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -205,44 +309,73 @@ export default function MeetingDetailPage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0">
-          {[
-            { value: "overview", label: "Overview" },
-            { value: "materiale", label: "Materiale" },
-            { value: "tasks", label: "Task" },
-          ].map((tab) => (
-            <TabsTrigger
-              key={tab.value}
-              value={tab.value}
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-sm"
-            >
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
-        <div className="pt-6">
-          <TabsContent value="overview">
-            <OverviewTab meeting={m} isAdmin={isAdmin} />
-          </TabsContent>
-          <TabsContent value="materiale">
-            <MaterialeTab meeting={m} isAdmin={isAdmin} />
-          </TabsContent>
-          <TabsContent value="tasks">
-            <TasksTab
-              meetingId={m.id}
-              tenantId={m.tenant_id}
-              isAdmin={isAdmin}
-              transcriptUrl={m.transcript_url}
-              summaryText={m.summary_text}
-              triggerGenerate={triggerGenerate}
-              onGenerateHandled={() => setTriggerGenerate(false)}
-            />
-          </TabsContent>
+      {/* Gate: loading state */}
+      {isGated && gateStatus.isLoading && (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-      </Tabs>
+      )}
+
+      {/* Gate: show requirements */}
+      {showGate && gs && (
+        <PreMeetingGate
+          gateStatus={gs}
+          meetingId={m.id}
+          onNavigatePreMeeting={() => navigate(`/meetings/${m.id}/pre-meeting`)}
+          onNavigateKpi={() => navigate("/kpi")}
+        />
+      )}
+
+      {/* Gate passed or admin: show completed banner + normal tabs */}
+      {isGated && allRequirementsMet && gs && (
+        <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-6 dark:border-green-900 dark:bg-green-950/30">
+          <Check className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" />
+          <p className="text-sm font-medium text-green-700 dark:text-green-300">
+            Preparazione completata!
+          </p>
+        </div>
+      )}
+
+      {/* Tabs — shown when NOT gated, or gate is passed */}
+      {(!isGated || allRequirementsMet) && !gateStatus.isLoading && (
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0">
+            {[
+              { value: "overview", label: "Overview" },
+              { value: "materiale", label: "Materiale" },
+              { value: "tasks", label: "Task" },
+            ].map((tab) => (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-sm"
+              >
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          <div className="pt-6">
+            <TabsContent value="overview">
+              <OverviewTab meeting={m} isAdmin={isAdmin} />
+            </TabsContent>
+            <TabsContent value="materiale">
+              <MaterialeTab meeting={m} isAdmin={isAdmin} />
+            </TabsContent>
+            <TabsContent value="tasks">
+              <TasksTab
+                meetingId={m.id}
+                tenantId={m.tenant_id}
+                isAdmin={isAdmin}
+                transcriptUrl={m.transcript_url}
+                summaryText={m.summary_text}
+                triggerGenerate={triggerGenerate}
+                onGenerateHandled={() => setTriggerGenerate(false)}
+              />
+            </TabsContent>
+          </div>
+        </Tabs>
+      )}
 
       {/* Edit Meeting Sheet */}
       <Sheet open={editOpen} onOpenChange={setEditOpen}>
@@ -318,5 +451,142 @@ export default function MeetingDetailPage() {
         </SheetContent>
       </Sheet>
     </div>
+  );
+}
+
+/* ---------- Pre-Meeting Gate Component ---------- */
+
+function PreMeetingGate({
+  gateStatus,
+  meetingId,
+  onNavigatePreMeeting,
+  onNavigateKpi,
+}: {
+  gateStatus: GateStatus;
+  meetingId: string;
+  onNavigatePreMeeting: () => void;
+  onNavigateKpi: () => void;
+}) {
+  const { hasSlideUpload, kpiCount, requiredKpiTotal, requiredKpiFilled, taskCount, hasAssignedKpis } =
+    gateStatus;
+
+  const items: {
+    label: string;
+    detail: string;
+    done: boolean;
+    icon: React.ReactNode;
+    warning?: string;
+    warningAction?: { label: string; onClick: () => void };
+  }[] = [
+    {
+      label: "Carica il tuo allegato PDF",
+      detail: hasSlideUpload ? "Allegato caricato" : "Nessun allegato caricato",
+      done: hasSlideUpload,
+      icon: <FileText className="h-4 w-4" />,
+    },
+    {
+      label: "Aggiorna almeno 3 KPI",
+      detail: `${kpiCount}/3 completate`,
+      done: kpiCount >= 3,
+      icon: <BarChart3 className="h-4 w-4" />,
+      warning: !hasAssignedKpis
+        ? "Non hai KPI assegnate. Vai alla sezione KPI per configurarle."
+        : undefined,
+      warningAction: !hasAssignedKpis
+        ? { label: "Vai ai KPI", onClick: onNavigateKpi }
+        : undefined,
+    },
+    {
+      label: "Crea almeno 3 TO DOs",
+      detail: `${taskCount}/3 creati`,
+      done: taskCount >= 3,
+      icon: <ListTodo className="h-4 w-4" />,
+    },
+    {
+      label: "KPI obbligatorie",
+      detail:
+        requiredKpiTotal === 0
+          ? "Nessuna KPI obbligatoria"
+          : `${requiredKpiFilled}/${requiredKpiTotal} completate`,
+      done: requiredKpiTotal === 0 || requiredKpiFilled >= requiredKpiTotal,
+      icon: <BarChart3 className="h-4 w-4" />,
+    },
+  ];
+
+  return (
+    <Card className="border border-border">
+      <CardHeader>
+        <CardTitle className="text-lg">
+          Completa la preparazione per accedere alla riunione
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {items.map((item, i) => (
+          <div key={i} className="space-y-2">
+            <div className="flex items-center gap-3 p-6 rounded-lg bg-muted/30">
+              <div
+                className={`flex items-center justify-center h-6 w-6 rounded-full shrink-0 ${
+                  item.done
+                    ? "bg-green-100 text-green-600 dark:bg-green-950 dark:text-green-400"
+                    : "bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400"
+                }`}
+              >
+                {item.done ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+              </div>
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                {item.icon}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{item.label}</p>
+                  <p className="text-xs text-muted-foreground">{item.detail}</p>
+                </div>
+              </div>
+              {!item.done && !item.warning && (
+                <Badge
+                  variant="destructive"
+                  className="inline-flex items-center text-xs shrink-0"
+                >
+                  Incompleto
+                </Badge>
+              )}
+              {item.done && (
+                <Badge
+                  variant="secondary"
+                  className="inline-flex items-center text-xs shrink-0 bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300"
+                >
+                  Completato
+                </Badge>
+              )}
+            </div>
+            {item.warning && (
+              <div className="flex items-center gap-2 ml-9 p-6 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <p className="text-xs text-amber-700 dark:text-amber-300 flex-1">
+                  {item.warning}
+                </p>
+                {item.warningAction && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs shrink-0"
+                    onClick={item.warningAction.onClick}
+                  >
+                    {item.warningAction.label}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+
+        <div className="flex items-center gap-3 pt-4 border-t border-border">
+          <Button
+            className="bg-foreground text-background hover:bg-foreground/90"
+            onClick={onNavigatePreMeeting}
+          >
+            Vai al Pre-Meeting
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
