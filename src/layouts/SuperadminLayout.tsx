@@ -1,6 +1,6 @@
 import { Outlet, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { LayoutDashboard, Building2, LogOut, Menu, X, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Building2, LogOut, Menu, X, ShieldCheck, BarChart3 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -9,6 +9,7 @@ const navItems = [
   { title: "Dashboard", url: "/superadmin/dashboard", icon: LayoutDashboard },
   { title: "Tenant", url: "/superadmin/tenants", icon: Building2 },
   { title: "Permessi", url: "/superadmin/permissions", icon: ShieldCheck },
+  { title: "Analytics", url: "/superadmin/analytics", icon: BarChart3 },
 ];
 
 export default function SuperadminLayout() {
