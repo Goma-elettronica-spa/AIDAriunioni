@@ -1090,9 +1090,13 @@ export type Database = {
           board_role_id: string | null
           created_at: string
           email: string
+          first_login_at: string | null
           full_name: string
           functional_area_id: string | null
           id: string
+          invite_status: string
+          invited_at: string | null
+          invited_by: string | null
           is_active: boolean
           job_title: string | null
           role: string
@@ -1103,9 +1107,13 @@ export type Database = {
           board_role_id?: string | null
           created_at?: string
           email: string
+          first_login_at?: string | null
           full_name: string
           functional_area_id?: string | null
           id: string
+          invite_status?: string
+          invited_at?: string | null
+          invited_by?: string | null
           is_active?: boolean
           job_title?: string | null
           role: string
@@ -1116,9 +1124,13 @@ export type Database = {
           board_role_id?: string | null
           created_at?: string
           email?: string
+          first_login_at?: string | null
           full_name?: string
           functional_area_id?: string | null
           id?: string
+          invite_status?: string
+          invited_at?: string | null
+          invited_by?: string | null
           is_active?: boolean
           job_title?: string | null
           role?: string
@@ -1138,6 +1150,13 @@ export type Database = {
             columns: ["functional_area_id"]
             isOneToOne: false
             referencedRelation: "functional_areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "users_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
