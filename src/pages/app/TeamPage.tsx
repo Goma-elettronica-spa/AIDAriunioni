@@ -540,7 +540,6 @@ export default function TeamPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="org_admin">Org Admin</SelectItem>
-                  <SelectItem value="information_officer">Information Officer</SelectItem>
                   <SelectItem value="dirigente">Dirigente</SelectItem>
                 </SelectContent>
               </Select>
