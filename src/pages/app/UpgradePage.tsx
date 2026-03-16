@@ -720,7 +720,7 @@ Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
           onClick={() => setCreateOpen(true)}
         >
           <Lightbulb className="h-4 w-4 mr-2" />
-          Nuova Richiesta
+          New Upgrade
         </Button>
       </div>
 
