@@ -19,8 +19,10 @@ import {
 import { toast } from "@/hooks/use-toast";
 
 import { OverviewTab } from "@/components/meeting-detail/OverviewTab";
+import { AttachmentsTab } from "@/components/meeting-detail/AttachmentsTab";
 import { MaterialeTab } from "@/components/meeting-detail/MaterialeTab";
 import { TasksTab } from "@/components/meeting-detail/TasksTab";
+import { KpiTab } from "@/components/meeting-detail/KpiTab";
 
 const statusConfig: Record<string, { label: string; dotClass: string }> = {
   draft: { label: "Bozza", dotClass: "bg-[hsl(var(--status-todo))]" },
