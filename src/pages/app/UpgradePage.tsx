@@ -320,7 +320,7 @@ export default function UpgradePage() {
   const [editReviewedValueAmount, setEditReviewedValueAmount] = useState<string>("");
   const [editReviewNote, setEditReviewNote] = useState("");
   const [editStatus, setEditStatus] = useState("");
-
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   // Create dialog state
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
