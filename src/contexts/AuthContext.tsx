@@ -25,19 +25,85 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = useCallback(async (userId: string) => {
+  const fetchProfile = useCallback(async (session: Session) => {
+    const userId = session.user.id;
     const { data, error } = await supabase
       .from("users")
       .select("id, email, full_name, role, tenant_id, job_title")
       .eq("id", userId)
       .maybeSingle();
 
-    if (error || !data) {
-      setUser(null);
-      return null;
+    if (data) {
+      setUser(data);
+      return data;
     }
-    setUser(data);
-    return data;
+
+    // No profile found — check if we have registration metadata to create one
+    const meta = session.user.user_metadata || {};
+    const registrationType = meta.registration_type as string | undefined;
+    const email = session.user.email?.toLowerCase() || "";
+
+    if (registrationType === "create_org") {
+      const { error: rpcError } = await supabase.rpc("register_with_new_tenant", {
+        p_user_id: userId,
+        p_email: email,
+        p_full_name: (meta.full_name as string) || "",
+        p_tenant_name: (meta.tenant_name as string) || "",
+        p_vat_number: (meta.vat_number as string) || "",
+      });
+      if (!rpcError) {
+        // Re-fetch the profile after creation
+        const { data: newProfile } = await supabase
+          .from("users")
+          .select("id, email, full_name, role, tenant_id, job_title")
+          .eq("id", userId)
+          .maybeSingle();
+        if (newProfile) {
+          setUser(newProfile);
+          return newProfile;
+        }
+      }
+    } else if (registrationType === "join_org") {
+      const tenantId = (meta.tenant_id as string) || "";
+      const { data: result } = await supabase.rpc("register_and_join_tenant", {
+        p_user_id: userId,
+        p_email: email,
+        p_full_name: (meta.full_name as string) || "",
+        p_tenant_id: tenantId,
+      });
+      // Re-fetch profile
+      const { data: newProfile } = await supabase
+        .from("users")
+        .select("id, email, full_name, role, tenant_id, job_title")
+        .eq("id", userId)
+        .maybeSingle();
+      if (newProfile) {
+        setUser(newProfile);
+        return newProfile;
+      }
+    }
+
+    // Try reconciliation by email
+    if (email) {
+      const { data: emailProfile } = await supabase
+        .from("users")
+        .select("id, email, full_name, role, tenant_id, job_title")
+        .eq("email", email)
+        .maybeSingle();
+
+      if (emailProfile && emailProfile.id !== userId) {
+        await supabase.from("users").update({ id: userId }).eq("id", emailProfile.id);
+        const reconciled = { ...emailProfile, id: userId };
+        setUser(reconciled);
+        return reconciled;
+      } else if (emailProfile) {
+        setUser(emailProfile);
+        return emailProfile;
+      }
+    }
+
+    setUser(null);
+    return null;
   }, []);
 
   useEffect(() => {
