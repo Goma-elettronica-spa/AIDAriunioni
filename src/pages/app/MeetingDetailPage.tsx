@@ -9,11 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 
 import { OverviewTab } from "@/components/meeting-detail/OverviewTab";
-import { VideoTab } from "@/components/meeting-detail/VideoTab";
-import { HighlightsTab } from "@/components/meeting-detail/HighlightsTab";
-import { KpiTab } from "@/components/meeting-detail/KpiTab";
-import { CommitmentsTab } from "@/components/meeting-detail/CommitmentsTab";
-import { DocumentsTab } from "@/components/meeting-detail/DocumentsTab";
+import { MaterialeTab } from "@/components/meeting-detail/MaterialeTab";
 import { TasksTab } from "@/components/meeting-detail/TasksTab";
 
 const statusConfig: Record<string, { label: string; dotClass: string }> = {
@@ -103,11 +99,13 @@ export default function MeetingDetailPage() {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-semibold text-foreground">{m.title}</h1>
-              <Badge variant="secondary" className="text-xs gap-1.5">
+              <Badge variant="secondary" className="inline-flex items-center text-xs gap-1.5">
                 <span className={`h-2 w-2 rounded-full ${sc.dotClass}`} />
                 {sc.label}
               </Badge>
-              <Badge variant="outline" className="text-xs font-mono">{m.quarter}</Badge>
+              <Badge variant="outline" className="inline-flex items-center text-xs font-mono">
+                {m.quarter}
+              </Badge>
             </div>
             <p className="text-sm text-muted-foreground mt-1">
               {new Date(m.scheduled_date).toLocaleDateString("it-IT", {
@@ -137,11 +135,7 @@ export default function MeetingDetailPage() {
         <TabsList className="w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0">
           {[
             { value: "overview", label: "Overview" },
-            { value: "video", label: "Video" },
-            { value: "highlights", label: "Highlights" },
-            { value: "kpi", label: "KPI" },
-            { value: "commitments", label: "Impegni" },
-            { value: "documents", label: "Documenti" },
+            { value: "materiale", label: "Materiale" },
             { value: "tasks", label: "Task" },
           ].map((tab) => (
             <TabsTrigger
@@ -158,23 +152,11 @@ export default function MeetingDetailPage() {
           <TabsContent value="overview">
             <OverviewTab meeting={m} isAdmin={isAdmin} />
           </TabsContent>
-          <TabsContent value="video">
-            <VideoTab meeting={m} isAdmin={isAdmin} />
-          </TabsContent>
-          <TabsContent value="highlights">
-            <HighlightsTab meetingId={m.id} tenantId={m.tenant_id} />
-          </TabsContent>
-          <TabsContent value="kpi">
-            <KpiTab meetingId={m.id} tenantId={m.tenant_id} />
-          </TabsContent>
-          <TabsContent value="commitments">
-            <CommitmentsTab meetingId={m.id} tenantId={m.tenant_id} />
-          </TabsContent>
-          <TabsContent value="documents">
-            <DocumentsTab meeting={m} isAdmin={isAdmin} />
+          <TabsContent value="materiale">
+            <MaterialeTab meeting={m} isAdmin={isAdmin} />
           </TabsContent>
           <TabsContent value="tasks">
-            <TasksTab meetingId={m.id} tenantId={m.tenant_id} isAdmin={isAdmin} transcriptUrl={m.transcript_url} />
+            <TasksTab meetingId={m.id} tenantId={m.tenant_id} isAdmin={isAdmin} transcriptUrl={m.transcript_url} summaryText={m.summary_text} />
           </TabsContent>
         </div>
       </Tabs>

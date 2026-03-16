@@ -33,6 +33,7 @@ interface Props {
   tenantId: string;
   isAdmin: boolean;
   transcriptUrl: string | null;
+  summaryText?: string | null;
 }
 
 interface SuggestedTask {
@@ -73,7 +74,7 @@ const deadlineLabels: Record<string, string> = {
   next_quarter: "Quarter successivo",
 };
 
-export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl }: Props) {
+export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl, summaryText }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [generating, setGenerating] = useState(false);
@@ -125,7 +126,10 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl }: Props)
       const ownerIds = [...new Set(data.map((t) => t.owner_user_id))];
       let ownersData: { id: string; full_name: string }[] = [];
       if (ownerIds.length) {
-        const { data: oData } = await supabase.from("users").select("id, full_name").in("id", ownerIds);
+        const { data: oData } = await supabase
+          .from("users")
+          .select("id, full_name")
+          .in("id", ownerIds);
         ownersData = oData ?? [];
       }
       const ownerMap = new Map<string, string>();
@@ -151,7 +155,7 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl }: Props)
               (u) =>
                 u.job_title &&
                 st.suggested_role &&
-                u.job_title.toLowerCase().includes(st.suggested_role.toLowerCase())
+                u.job_title.toLowerCase().includes(st.suggested_role.toLowerCase()),
             );
             if (match) matchedUserId = match.id;
           }
@@ -166,29 +170,97 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl }: Props)
     }
   }, [suggestedTasks.data, tenantUsers.data]);
 
-  // TODO: Replace with Claude API call
   const generateSuggestedTasks = async () => {
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY || "";
+    if (!apiKey) {
+      toast({
+        title: "Configura la chiave API Anthropic nelle variabili d'ambiente (VITE_ANTHROPIC_API_KEY)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Gather the text to analyze: prefer transcript, fall back to summary_text
+    let transcriptText = "";
+
+    if (transcriptUrl) {
+      const ext = transcriptUrl.toLowerCase();
+      if (ext.endsWith(".txt") || ext.endsWith(".md")) {
+        try {
+          const r = await fetch(transcriptUrl);
+          transcriptText = await r.text();
+        } catch {
+          // fall through to summary_text
+        }
+      }
+    }
+
+    if (!transcriptText && summaryText) {
+      transcriptText = summaryText;
+    }
+
+    if (!transcriptText) {
+      toast({
+        title: "Nessuna trascrizione o riassunto disponibile per l'analisi",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const users = tenantUsers.data ?? [];
+
     setGenerating(true);
     try {
-      const placeholderTasks = [
-        {
-          title: "Verificare andamento KPI vendite Q1",
-          description: "Emerso dalla discussione sui risultati commerciali",
-          suggested_role: "Direttore Commerciale",
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
         },
-        {
-          title: "Preparare piano di azione margini",
-          description: "Margini in calo, necessaria analisi dettagliata",
-          suggested_role: "CFO",
-        },
-        {
-          title: "Aggiornare roadmap prodotto",
-          description: "Nuove priorita' emerse dalla riunione",
-          suggested_role: "CTO",
-        },
-      ];
+        body: JSON.stringify({
+          model: "claude-opus-4-6",
+          max_tokens: 2048,
+          messages: [
+            {
+              role: "user",
+              content: `Analizza questa trascrizione di una riunione dirigenziale e suggerisci 3-7 task operativi concreti.
 
-      const inserts = placeholderTasks.map((t) => ({
+Per ogni task indica:
+- title: titolo breve e specifico del task
+- description: descrizione di cosa fare (1-2 frasi)
+- suggested_role: il ruolo aziendale piu' adatto (es. "Direttore Commerciale", "CFO", "CTO", "HR Manager")
+
+I ruoli disponibili nell'organizzazione sono:
+${users.map((u) => `- ${u.full_name}: ${u.job_title || "Nessun ruolo"}`).join("\n")}
+
+Rispondi SOLO con un array JSON valido, senza altro testo. Esempio:
+[{"title":"...","description":"...","suggested_role":"..."}]
+
+TRASCRIZIONE:
+${transcriptText}`,
+            },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => null);
+        throw new Error(
+          errData?.error?.message || `Errore API Anthropic: ${response.status} ${response.statusText}`,
+        );
+      }
+
+      const data = await response.json();
+      const content = data.content[0].text;
+      const suggestedTasksFromAI = JSON.parse(content) as Array<{
+        title: string;
+        description: string;
+        suggested_role: string;
+      }>;
+
+      const inserts = suggestedTasksFromAI.map((t) => ({
         meeting_id: meetingId,
         tenant_id: tenantId,
         title: t.title,
@@ -201,7 +273,7 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl }: Props)
       if (error) throw error;
 
       queryClient.invalidateQueries({ queryKey: ["suggested-tasks", meetingId] });
-      for (const t of placeholderTasks) {
+      for (const t of suggestedTasksFromAI) {
         writeAuditLog({
           tenantId,
           userId: user!.id,
@@ -321,7 +393,7 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl }: Props)
   return (
     <div className="space-y-8">
       {/* AI Suggest button */}
-      {isAdmin && transcriptUrl && (
+      {isAdmin && (transcriptUrl || summaryText) && (
         <div className="flex items-center gap-3">
           <Button
             className="bg-foreground text-background hover:bg-foreground/90"
@@ -397,7 +469,7 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl }: Props)
                           {(tenantUsers.data ?? []).map((u) => (
                             <SelectItem key={u.id} value={u.id}>
                               {u.full_name}
-                              {u.job_title ? ` — ${u.job_title}` : ""}
+                              {u.job_title ? ` \u2014 ${u.job_title}` : ""}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -481,7 +553,10 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl }: Props)
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-foreground line-through">{st.title}</p>
                     </div>
-                    <Badge variant="secondary" className="inline-flex items-center text-[10px] ml-3 shrink-0">
+                    <Badge
+                      variant="secondary"
+                      className="inline-flex items-center text-[10px] ml-3 shrink-0"
+                    >
                       Rifiutato
                     </Badge>
                   </CardContent>
@@ -506,9 +581,7 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl }: Props)
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {task.title}
-                      </p>
+                      <p className="text-sm font-medium text-foreground truncate">{task.title}</p>
                       {task.source === "ai_suggested" ? (
                         <Sparkles className="h-3 w-3 text-muted-foreground shrink-0" />
                       ) : (
@@ -518,7 +591,10 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl }: Props)
                     <p className="text-xs text-muted-foreground">{task.owner_name}</p>
                   </div>
                   <div className="flex items-center gap-3 shrink-0 ml-4">
-                    <Badge variant="secondary" className="inline-flex items-center text-[10px] gap-1">
+                    <Badge
+                      variant="secondary"
+                      className="inline-flex items-center text-[10px] gap-1"
+                    >
                       <span className={`h-1.5 w-1.5 rounded-full ${sc.dotClass}`} />
                       {sc.label}
                     </Badge>
