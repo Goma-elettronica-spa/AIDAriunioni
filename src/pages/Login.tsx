@@ -274,41 +274,25 @@ export default function Login() {
     setSuccess(false);
     setLoading(true);
 
-    // 1. Sign up the user
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+    // Sign up with metadata — tenant/profile creation happens in AuthCallback after email confirmation
+    const { error: signUpError } = await supabase.auth.signUp({
       email: regEmail.trim().toLowerCase(),
       password: regPassword,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
+        data: {
+          registration_type: "create_org",
+          full_name: regFullName.trim(),
+          tenant_name: orgName.trim(),
+          vat_number: orgVat.trim(),
+        },
       },
-    });
-
-    if (signUpError) {
-      setLoading(false);
-      handleError(signUpError.message);
-      return;
-    }
-
-    const userId = signUpData.user?.id;
-    if (!userId) {
-      setLoading(false);
-      setError("Errore nella creazione dell'account. Riprova.");
-      return;
-    }
-
-    // 2. Create tenant and user profile via RPC
-    const { data: result, error: rpcError } = await supabase.rpc("register_with_new_tenant", {
-      p_user_id: userId,
-      p_email: regEmail.trim(),
-      p_full_name: regFullName.trim(),
-      p_tenant_name: orgName.trim(),
-      p_vat_number: orgVat.trim(),
     });
 
     setLoading(false);
 
-    if (rpcError) {
-      setError("Errore nella creazione dell'organizzazione: " + rpcError.message);
+    if (signUpError) {
+      handleError(signUpError.message);
       return;
     }
 
