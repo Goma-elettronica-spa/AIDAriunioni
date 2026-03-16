@@ -8,6 +8,7 @@ import { useState } from "react";
 const navItems = [
   { title: "Dashboard", url: "/superadmin/dashboard", icon: LayoutDashboard },
   { title: "Tenant", url: "/superadmin/tenants", icon: Building2 },
+  { title: "Permessi", url: "/superadmin/permissions", icon: ShieldCheck },
 ];
 
 export default function SuperadminLayout() {
