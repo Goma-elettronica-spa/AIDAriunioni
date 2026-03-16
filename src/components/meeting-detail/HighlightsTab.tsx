@@ -35,11 +35,13 @@ export function HighlightsTab({ meetingId, tenantId }: Props) {
       if (error) throw error;
 
       const userIds = [...new Set(data.map((h) => h.user_id))];
-      const { data: users } = userIds.length
-        ? await supabase.from("users").select("id, full_name, job_title").in("id", userIds)
-        : { data: [] };
+      let usersData: { id: string; full_name: string; job_title: string | null }[] = [];
+      if (userIds.length) {
+        const { data: uData } = await supabase.from("users").select("id, full_name, job_title").in("id", userIds);
+        usersData = uData ?? [];
+      }
       const userMap = new Map<string, { full_name: string; job_title: string | null }>();
-      for (const u of users?.data ?? []) userMap.set(u.id, { full_name: u.full_name, job_title: u.job_title });
+      for (const u of usersData) userMap.set(u.id, { full_name: u.full_name, job_title: u.job_title });
 
       // Group by user
       const grouped = new Map<string, { user: { full_name: string; job_title: string | null }; items: typeof data }>();

@@ -36,11 +36,13 @@ export function TasksTab({ meetingId, tenantId }: Props) {
       if (error) throw error;
 
       const ownerIds = [...new Set(data.map((t) => t.owner_user_id))];
-      const { data: owners } = ownerIds.length
-        ? await supabase.from("users").select("id, full_name").in("id", ownerIds)
-        : { data: [] };
+      let ownersData: { id: string; full_name: string }[] = [];
+      if (ownerIds.length) {
+        const { data: oData } = await supabase.from("users").select("id, full_name").in("id", ownerIds);
+        ownersData = oData ?? [];
+      }
       const ownerMap = new Map<string, string>();
-      for (const o of owners?.data ?? []) ownerMap.set(o.id, o.full_name);
+      for (const o of ownersData) ownerMap.set(o.id, o.full_name);
 
       return data.map((t) => ({
         ...t,

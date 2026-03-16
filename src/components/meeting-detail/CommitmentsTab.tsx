@@ -27,11 +27,13 @@ export function CommitmentsTab({ meetingId, tenantId }: Props) {
       if (error) throw error;
 
       const userIds = [...new Set(data.map((c) => c.user_id))];
-      const { data: users } = userIds.length
-        ? await supabase.from("users").select("id, full_name").in("id", userIds)
-        : { data: [] };
+      let usersData: { id: string; full_name: string }[] = [];
+      if (userIds.length) {
+        const { data: uData } = await supabase.from("users").select("id, full_name").in("id", userIds);
+        usersData = uData ?? [];
+      }
       const userMap = new Map<string, string>();
-      for (const u of users?.data ?? []) userMap.set(u.id, u.full_name);
+      for (const u of usersData) userMap.set(u.id, u.full_name);
 
       const grouped = new Map<string, { name: string; items: typeof data }>();
       for (const c of data) {
