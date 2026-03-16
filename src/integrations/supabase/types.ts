@@ -371,6 +371,57 @@ export type Database = {
           },
         ]
       }
+      join_requests: {
+        Row: {
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "join_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "join_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kpi_definitions: {
         Row: {
           created_at: string
@@ -810,6 +861,7 @@ export type Database = {
           plan: string
           slug: string
           updated_at: string
+          vat_number: string | null
         }
         Insert: {
           created_at?: string
@@ -819,6 +871,7 @@ export type Database = {
           plan?: string
           slug: string
           updated_at?: string
+          vat_number?: string | null
         }
         Update: {
           created_at?: string
@@ -828,6 +881,7 @@ export type Database = {
           plan?: string
           slug?: string
           updated_at?: string
+          vat_number?: string | null
         }
         Relationships: []
       }
@@ -884,6 +938,13 @@ export type Database = {
       current_user_tenant_id: { Args: never; Returns: string }
       is_io_or_admin: { Args: never; Returns: boolean }
       is_superadmin: { Args: never; Returns: boolean }
+      search_tenant_by_vat: {
+        Args: { p_vat: string }
+        Returns: {
+          id: string
+          name: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
