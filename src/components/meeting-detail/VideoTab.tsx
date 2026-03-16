@@ -4,13 +4,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
-import { Upload, FileText, Loader2 } from "lucide-react";
+import { Upload, FileText, Loader2, Download } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
 
 interface Props {
   meeting: Tables<"meetings">;
   isAdmin: boolean;
+}
+
+const ALLOWED_TRANSCRIPT_EXTENSIONS = [".txt", ".md", ".docx"];
+
+function getFileExtension(filename: string): string {
+  const idx = filename.lastIndexOf(".");
+  return idx >= 0 ? filename.slice(idx).toLowerCase() : "";
 }
 
 export function VideoTab({ meeting, isAdmin }: Props) {
@@ -22,16 +29,25 @@ export function VideoTab({ meeting, isAdmin }: Props) {
   const videoInputRef = useRef<HTMLInputElement>(null);
   const transcriptInputRef = useRef<HTMLInputElement>(null);
 
-  // Load transcript text if URL exists
+  const transcriptIsDocx = meeting.transcript_url
+    ? meeting.transcript_url.toLowerCase().endsWith(".docx")
+    : false;
+
+  const transcriptIsText = meeting.transcript_url
+    ? meeting.transcript_url.toLowerCase().endsWith(".txt") ||
+      meeting.transcript_url.toLowerCase().endsWith(".md")
+    : false;
+
+  // Load transcript text if URL exists and is a text-based format
   useEffect(() => {
-    if (meeting.transcript_url) {
+    if (meeting.transcript_url && transcriptIsText) {
       setTranscriptLoaded(true);
       fetch(meeting.transcript_url)
         .then((r) => r.text())
         .then(setTranscript)
         .catch(() => setTranscript("Errore nel caricamento della trascrizione."));
     }
-  }, [meeting.transcript_url]);
+  }, [meeting.transcript_url, transcriptIsText]);
 
   const uploadFile = useCallback(
     async (file: File, bucket: string, field: "video_url" | "transcript_url") => {
@@ -71,8 +87,12 @@ export function VideoTab({ meeting, isAdmin }: Props) {
   };
 
   const handleTranscriptUpload = async (file: File) => {
-    if (!file.name.endsWith(".txt")) {
-      toast({ title: "Solo file .txt", variant: "destructive" });
+    const ext = getFileExtension(file.name);
+    if (!ALLOWED_TRANSCRIPT_EXTENSIONS.includes(ext)) {
+      toast({
+        title: "Formato non supportato. Usa file .txt, .md o .docx",
+        variant: "destructive",
+      });
       return;
     }
     setUploadingTranscript(true);
@@ -136,13 +156,32 @@ export function VideoTab({ meeting, isAdmin }: Props) {
       <div>
         <h2 className="text-lg font-semibold text-foreground mb-4">Trascrizione</h2>
         {meeting.transcript_url ? (
-          <Card className="border border-border">
-            <CardContent className="p-card-padding">
-              <pre className="text-sm text-foreground whitespace-pre-wrap max-h-96 overflow-y-auto font-sans leading-relaxed">
-                {transcript ?? "Caricamento…"}
-              </pre>
-            </CardContent>
-          </Card>
+          transcriptIsDocx ? (
+            <Card className="border border-border">
+              <CardContent className="flex items-center justify-between p-6">
+                <div className="flex items-center gap-3">
+                  <FileText className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-sm font-medium text-foreground">
+                    Trascrizione Word
+                  </span>
+                </div>
+                <Button variant="outline" size="sm" asChild>
+                  <a href={meeting.transcript_url} target="_blank" rel="noopener noreferrer">
+                    <Download className="h-3.5 w-3.5 mr-1.5" />
+                    Scarica
+                  </a>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border border-border">
+              <CardContent className="p-card-padding">
+                <pre className="text-sm text-foreground whitespace-pre-wrap max-h-96 overflow-y-auto font-sans leading-relaxed">
+                  {transcript ?? "Caricamento\u2026"}
+                </pre>
+              </CardContent>
+            </Card>
+          )
         ) : isAdmin ? (
           <div
             className="border-2 border-dashed border-border rounded-lg p-12 text-center cursor-pointer hover:bg-muted/20 transition-colors"
@@ -154,7 +193,7 @@ export function VideoTab({ meeting, isAdmin }: Props) {
               <>
                 <FileText className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                 <p className="text-sm text-muted-foreground">
-                  Carica la trascrizione (.txt)
+                  Carica la trascrizione (.txt, .md, .docx)
                 </p>
               </>
             )}
@@ -165,7 +204,7 @@ export function VideoTab({ meeting, isAdmin }: Props) {
         <input
           ref={transcriptInputRef}
           type="file"
-          accept=".txt"
+          accept=".txt,.md,.docx,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];

@@ -174,7 +174,7 @@ export default function MeetingDetailPage() {
             <DocumentsTab meeting={m} isAdmin={isAdmin} />
           </TabsContent>
           <TabsContent value="tasks">
-            <TasksTab meetingId={m.id} tenantId={m.tenant_id} />
+            <TasksTab meetingId={m.id} tenantId={m.tenant_id} isAdmin={isAdmin} transcriptUrl={m.transcript_url} />
           </TabsContent>
         </div>
       </Tabs>

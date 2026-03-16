@@ -16,6 +16,7 @@ import {
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 import { useState, useMemo } from "react";
 
 const allNavItems = [
@@ -140,6 +141,11 @@ export default function AppLayout() {
           <h1 className="text-sm font-medium text-foreground">
             {tenantName ?? <span className="text-muted-foreground">Caricamento…</span>}
           </h1>
+          <div className="ml-auto flex items-center gap-2">
+            {user && (
+              <NotificationBell userId={user.id} tenantId={user.tenant_id} />
+            )}
+          </div>
         </header>
 
         {/* Content */}

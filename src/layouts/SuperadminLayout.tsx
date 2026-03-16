@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { LayoutDashboard, Building2, LogOut, Menu, X, ShieldCheck, BarChart3, Eye } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 import { useState } from "react";
 
 const navItems = [
@@ -114,6 +115,9 @@ export default function SuperadminLayout() {
             Riunioni in Cloud — <span className="text-muted-foreground">Superadmin</span>
           </h1>
           <div className="ml-auto flex items-center gap-3">
+            {user && (
+              <NotificationBell userId={user.id} tenantId={user.tenant_id} />
+            )}
             <span className="text-sm text-muted-foreground hidden sm:inline">{user?.full_name}</span>
             <Button variant="outline" size="sm" onClick={handleSignOut} className="hidden sm:flex">
               <LogOut className="h-3.5 w-3.5 mr-1.5" />
