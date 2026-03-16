@@ -830,18 +830,48 @@ export default function BoardPage() {
 
               {/* Save button */}
               {canEdit && (
-                <Button
-                  className="w-full"
-                  onClick={() => updateTaskMutation.mutate()}
-                  disabled={updateTaskMutation.isPending || !editTitle.trim()}
-                >
-                  {updateTaskMutation.isPending ? "Salvataggio..." : "Salva"}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1"
+                    onClick={() => updateTaskMutation.mutate()}
+                    disabled={updateTaskMutation.isPending || !editTitle.trim()}
+                  >
+                    {updateTaskMutation.isPending ? "Salvataggio..." : "Salva"}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    onClick={() => setDeleteConfirmOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               )}
             </div>
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminare questo task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Questa azione è irreversibile. Il task e tutti i sotto-task verranno eliminati.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => selectedTask && deleteTaskMutation.mutate(selectedTask.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteTaskMutation.isPending ? "Eliminazione..." : "Elimina"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
