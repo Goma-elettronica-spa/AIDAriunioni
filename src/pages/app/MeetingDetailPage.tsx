@@ -269,8 +269,11 @@ export default function MeetingDetailPage() {
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
               )}
-              <Badge variant="secondary" className="inline-flex items-center text-xs gap-1.5">
-                <span className={`h-2 w-2 rounded-full ${sc.dotClass}`} />
+              <Badge
+                variant="secondary"
+                className={`inline-flex items-center text-xs gap-1.5 ${displayStatus === "completed" ? "bg-gray-800 text-white" : ""}`}
+              >
+                <span className={`h-2 w-2 rounded-full ${displayStatus === "completed" ? "bg-gray-300" : sc.dotClass}`} />
                 {sc.label}
               </Badge>
               <Badge variant="outline" className="inline-flex items-center text-xs font-mono">
