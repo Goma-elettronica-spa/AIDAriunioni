@@ -30,7 +30,7 @@ type UserRow = {
 
 type JoinRequest = {
   id: string;
-  user_auth_id: string;
+  user_id: string;
   email: string;
   full_name: string;
   status: string;
