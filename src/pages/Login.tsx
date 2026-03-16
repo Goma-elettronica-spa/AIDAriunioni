@@ -274,41 +274,25 @@ export default function Login() {
     setSuccess(false);
     setLoading(true);
 
-    // 1. Sign up the user
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+    // Sign up with metadata — tenant/profile creation happens in AuthCallback after email confirmation
+    const { error: signUpError } = await supabase.auth.signUp({
       email: regEmail.trim().toLowerCase(),
       password: regPassword,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
+        data: {
+          registration_type: "create_org",
+          full_name: regFullName.trim(),
+          tenant_name: orgName.trim(),
+          vat_number: orgVat.trim(),
+        },
       },
-    });
-
-    if (signUpError) {
-      setLoading(false);
-      handleError(signUpError.message);
-      return;
-    }
-
-    const userId = signUpData.user?.id;
-    if (!userId) {
-      setLoading(false);
-      setError("Errore nella creazione dell'account. Riprova.");
-      return;
-    }
-
-    // 2. Create tenant and user profile via RPC
-    const { data: result, error: rpcError } = await supabase.rpc("register_with_new_tenant", {
-      p_user_id: userId,
-      p_email: regEmail.trim(),
-      p_full_name: regFullName.trim(),
-      p_tenant_name: orgName.trim(),
-      p_vat_number: orgVat.trim(),
     });
 
     setLoading(false);
 
-    if (rpcError) {
-      setError("Errore nella creazione dell'organizzazione: " + rpcError.message);
+    if (signUpError) {
+      handleError(signUpError.message);
       return;
     }
 
@@ -324,52 +308,29 @@ export default function Login() {
     setSuccess(false);
     setLoading(true);
 
-    // 1. Sign up the user
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+    // Sign up with metadata — tenant join happens in AuthCallback after email confirmation
+    const { error: signUpError } = await supabase.auth.signUp({
       email: regEmail.trim().toLowerCase(),
       password: regPassword,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
+        data: {
+          registration_type: "join_org",
+          full_name: regFullName.trim(),
+          tenant_id: selectedTenant.id,
+        },
       },
-    });
-
-    if (signUpError) {
-      setLoading(false);
-      handleError(signUpError.message);
-      return;
-    }
-
-    const userId = signUpData.user?.id;
-    if (!userId) {
-      setLoading(false);
-      setError("Errore nella creazione dell'account. Riprova.");
-      return;
-    }
-
-    // 2. Register and join tenant via RPC
-    const { data: result, error: joinRpcError } = await supabase.rpc("register_and_join_tenant", {
-      p_user_id: userId,
-      p_email: regEmail.trim(),
-      p_full_name: regFullName.trim(),
-      p_tenant_id: selectedTenant.id,
     });
 
     setLoading(false);
 
-    if (joinRpcError) {
-      setError("Errore nell'invio della richiesta: " + joinRpcError.message);
+    if (signUpError) {
+      handleError(signUpError.message);
       return;
     }
 
     setSuccess(true);
-    const resultObj = result as Record<string, unknown> | null;
-    if (resultObj?.status === "auto_approved") {
-      setSuccessMessage("Accesso approvato! Effettua il login.");
-    } else if (resultObj?.status === "pending") {
-      setSuccessMessage("Richiesta inviata! L'amministratore della tua organizzazione approvera' il tuo accesso.");
-    } else {
-      setSuccessMessage("Registrazione completata! Controlla la tua email per confermare.");
-    }
+    setSuccessMessage("Registrazione completata! Controlla la tua email per confermare. Dopo la conferma, la tua richiesta sara' inviata all'amministratore.");
     resetRegister();
   };
 
