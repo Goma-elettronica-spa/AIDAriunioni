@@ -11,6 +11,7 @@ import {
   Menu,
   TrendingUp,
   Network,
+  Lightbulb,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,8 @@ const allNavItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, roles: null },
   { title: "KPI", url: "/kpi", icon: TrendingUp, roles: ["org_admin", "information_officer", "dirigente"] as string[] },
   { title: "Riunioni", url: "/meetings", icon: CalendarDays, roles: ["org_admin", "information_officer", "dirigente"] as string[] },
-  { title: "Board", url: "/board", icon: Columns3, roles: ["org_admin", "information_officer", "dirigente"] as string[] },
+  { title: "To Dos", url: "/board", icon: Columns3, roles: ["org_admin", "information_officer", "dirigente"] as string[] },
+  { title: "Upgrade", url: "/upgrade", icon: Lightbulb, roles: null },
   { title: "Team", url: "/team", icon: Users, roles: ["org_admin"] as string[] },
   { title: "Organigramma", url: "/board-roles", icon: Network, roles: ["org_admin"] as string[] },
   { title: "Audit Log", url: "/audit-log", icon: ShieldCheck, roles: ["org_admin", "information_officer"] as string[] },
