@@ -132,6 +132,7 @@ export type Database = {
           linked_kpi_id: string | null
           meeting_id: string
           owner_user_id: string
+          parent_task_id: string | null
           position: number
           source: string
           status: string
@@ -151,6 +152,7 @@ export type Database = {
           linked_kpi_id?: string | null
           meeting_id: string
           owner_user_id: string
+          parent_task_id?: string | null
           position?: number
           source: string
           status?: string
@@ -170,6 +172,7 @@ export type Database = {
           linked_kpi_id?: string | null
           meeting_id?: string
           owner_user_id?: string
+          parent_task_id?: string | null
           position?: number
           source?: string
           status?: string
@@ -212,6 +215,13 @@ export type Database = {
             columns: ["owner_user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "board_tasks_parent_task_id_fkey"
+            columns: ["parent_task_id"]
+            isOneToOne: false
+            referencedRelation: "board_tasks"
             referencedColumns: ["id"]
           },
           {
@@ -499,6 +509,7 @@ export type Database = {
       kpi_definitions: {
         Row: {
           created_at: string
+          description: string | null
           direction: string
           id: string
           is_active: boolean
@@ -512,6 +523,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          description?: string | null
           direction?: string
           id?: string
           is_active?: boolean
@@ -525,6 +537,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          description?: string | null
           direction?: string
           id?: string
           is_active?: boolean
@@ -766,6 +779,7 @@ export type Database = {
           status: string
           summary_docx_url: string | null
           summary_pdf_url: string | null
+          summary_text: string | null
           tenant_id: string
           title: string
           transcript_url: string | null
@@ -783,6 +797,7 @@ export type Database = {
           status?: string
           summary_docx_url?: string | null
           summary_pdf_url?: string | null
+          summary_text?: string | null
           tenant_id: string
           title: string
           transcript_url?: string | null
@@ -800,6 +815,7 @@ export type Database = {
           status?: string
           summary_docx_url?: string | null
           summary_pdf_url?: string | null
+          summary_text?: string | null
           tenant_id?: string
           title?: string
           transcript_url?: string | null
@@ -812,6 +828,67 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          is_read: boolean
+          link: string | null
+          tenant_id: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_read?: boolean
+          link?: string | null
+          tenant_id: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_read?: boolean
+          link?: string | null
+          tenant_id?: string
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -961,6 +1038,52 @@ export type Database = {
           vat_number?: string
         }
         Relationships: []
+      }
+      user_functional_areas: {
+        Row: {
+          created_at: string
+          functional_area_id: string
+          id: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          functional_area_id: string
+          id?: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          functional_area_id?: string
+          id?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_functional_areas_functional_area_id_fkey"
+            columns: ["functional_area_id"]
+            isOneToOne: false
+            referencedRelation: "functional_areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_functional_areas_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_functional_areas_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       users: {
         Row: {
