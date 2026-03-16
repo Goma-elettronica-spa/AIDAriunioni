@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button";
 export default function AuthCallback() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    // Listen for the auth state change triggered by the URL hash/code
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === "SIGNED_IN" && session) {
@@ -42,16 +42,48 @@ export default function AuthCallback() {
             }
           }
 
-          if (!profile) {
-            setError("Account non autorizzato");
-            await supabase.auth.signOut();
+          // If we have a profile with tenant_id, redirect by role
+          if (profile && profile.tenant_id) {
+            if (profile.role === "superadmin") {
+              navigate("/superadmin/dashboard", { replace: true });
+            } else {
+              navigate("/dashboard", { replace: true });
+            }
             return;
           }
 
-          if (profile.role === "superadmin") {
-            navigate("/superadmin/dashboard", { replace: true });
-          } else {
-            navigate("/dashboard", { replace: true });
+          // Profile exists but no tenant_id - check for pending join requests
+          if (profile && !profile.tenant_id) {
+            const { data: joinReq } = await supabase
+              .from("join_requests")
+              .select("id, status")
+              .eq("user_auth_id", session.user.id)
+              .eq("status", "pending")
+              .maybeSingle();
+
+            if (joinReq) {
+              setStatusMessage("La tua richiesta di accesso e' in attesa di approvazione.");
+            } else {
+              setStatusMessage("Il tuo account e' in attesa di assegnazione a un'organizzazione.");
+            }
+            return;
+          }
+
+          // No profile at all - check for pending join requests by auth id
+          if (!profile) {
+            const { data: joinReq } = await supabase
+              .from("join_requests")
+              .select("id, status")
+              .eq("user_auth_id", session.user.id)
+              .eq("status", "pending")
+              .maybeSingle();
+
+            if (joinReq) {
+              setStatusMessage("La tua richiesta di accesso e' in attesa di approvazione.");
+            } else {
+              setStatusMessage("Il tuo account e' in attesa di assegnazione a un'organizzazione.");
+            }
+            return;
           }
         }
       }
@@ -68,6 +100,23 @@ export default function AuthCallback() {
     };
   }, [navigate]);
 
+  if (statusMessage) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4 px-4">
+        <p className="text-sm text-muted-foreground text-center max-w-md">{statusMessage}</p>
+        <Button
+          variant="outline"
+          onClick={async () => {
+            await supabase.auth.signOut();
+            navigate("/login", { replace: true });
+          }}
+        >
+          Torna al login
+        </Button>
+      </div>
+    );
+  }
+
   if (error) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
@@ -83,7 +132,7 @@ export default function AuthCallback() {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">Autenticazione in corso…</p>
+        <p className="text-sm text-muted-foreground">Autenticazione in corso...</p>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { UserPlus, Pencil, Power } from "lucide-react";
+import { UserPlus, Pencil, Power, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,6 +26,15 @@ type UserRow = {
   role: string;
   job_title: string | null;
   is_active: boolean;
+};
+
+type JoinRequest = {
+  id: string;
+  user_auth_id: string;
+  email: string;
+  full_name: string;
+  status: string;
+  created_at: string;
 };
 
 const roleConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
@@ -86,6 +95,22 @@ export default function TeamPage() {
     },
   });
 
+  // Fetch pending join requests
+  const joinRequests = useQuery({
+    queryKey: ["join-requests", tenantId],
+    enabled: !!tenantId && user?.role === "org_admin",
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("join_requests")
+        .select("id, user_auth_id, email, full_name, status, created_at")
+        .eq("tenant_id", tenantId!)
+        .eq("status", "pending")
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data as JoinRequest[];
+    },
+  });
+
   const filtered = useMemo(() => {
     if (!users.data) return [];
     return users.data.filter((u) => {
@@ -98,9 +123,6 @@ export default function TeamPage() {
 
   const inviteMutation = useMutation({
     mutationFn: async () => {
-      // Pre-provisioned record with placeholder UUID.
-      // When the user actually signs up via magic link, AuthCallback will
-      // reconcile this record by updating the id to match auth.users.id.
       const { error } = await supabase.from("users").insert({
         id: crypto.randomUUID(),
         email: invEmail.trim().toLowerCase(),
@@ -120,7 +142,7 @@ export default function TeamPage() {
       setInvRole("dirigente");
       toast({
         title: "Utente creato",
-        description: "L'utente riceverà il magic link al primo accesso",
+        description: "L'utente ricevera' il magic link al primo accesso",
       });
     },
     onError: (err: Error) => {
@@ -167,6 +189,54 @@ export default function TeamPage() {
     },
   });
 
+  // Approve join request
+  const approveMutation = useMutation({
+    mutationFn: async (request: JoinRequest) => {
+      // 1. Update join_request status to approved
+      const { error: updateError } = await supabase
+        .from("join_requests")
+        .update({ status: "approved" })
+        .eq("id", request.id);
+      if (updateError) throw updateError;
+
+      // 2. Create user record in users table
+      const { error: userError } = await supabase.from("users").insert({
+        id: request.user_auth_id,
+        email: request.email,
+        full_name: request.full_name,
+        role: "dirigente",
+        tenant_id: tenantId!,
+      });
+      if (userError) throw userError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["join-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["team-users"] });
+      toast({ title: "Richiesta approvata", description: "L'utente e' stato aggiunto al team." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
+  // Reject join request
+  const rejectMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      const { error } = await supabase
+        .from("join_requests")
+        .update({ status: "rejected" })
+        .eq("id", requestId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["join-requests"] });
+      toast({ title: "Richiesta rifiutata" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
   const openEdit = (u: UserRow) => {
     setEditUser(u);
     setEditName(u.full_name);
@@ -175,8 +245,60 @@ export default function TeamPage() {
     setEditOpen(true);
   };
 
+  const pendingRequests = joinRequests.data ?? [];
+
   return (
     <div className="space-y-section-gap">
+      {/* Pending Join Requests Section */}
+      {user?.role === "org_admin" && pendingRequests.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-foreground">Richieste di Accesso</h2>
+          <div className="grid gap-3">
+            {pendingRequests.map((req) => (
+              <div
+                key={req.id}
+                className="flex items-center justify-between border border-border rounded-lg p-4"
+              >
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium">{req.full_name}</p>
+                  <p className="text-xs text-muted-foreground">{req.email}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Richiesta del{" "}
+                    {new Date(req.created_at).toLocaleDateString("it-IT", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                    })}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 border-green-300 text-green-700 hover:bg-green-50 hover:text-green-800"
+                    onClick={() => approveMutation.mutate(req)}
+                    disabled={approveMutation.isPending || rejectMutation.isPending}
+                  >
+                    <Check className="h-3.5 w-3.5 mr-1" />
+                    Approva
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800"
+                    onClick={() => rejectMutation.mutate(req.id)}
+                    disabled={approveMutation.isPending || rejectMutation.isPending}
+                  >
+                    <X className="h-3.5 w-3.5 mr-1" />
+                    Rifiuta
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-foreground">Team</h1>
@@ -254,7 +376,7 @@ export default function TeamPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                      {u.job_title ?? "—"}
+                      {u.job_title ?? "\u2014"}
                     </TableCell>
                     <TableCell>
                       <StatusDot active={u.is_active} />
@@ -374,7 +496,7 @@ export default function TeamPage() {
                   !invTitle.trim()
                 }
               >
-                {inviteMutation.isPending ? "Creazione…" : "Invita"}
+                {inviteMutation.isPending ? "Creazione..." : "Invita"}
               </Button>
             </DialogFooter>
           </form>
@@ -436,7 +558,7 @@ export default function TeamPage() {
                 type="submit"
                 disabled={editMutation.isPending || !editName.trim()}
               >
-                {editMutation.isPending ? "Salvataggio…" : "Salva"}
+                {editMutation.isPending ? "Salvataggio..." : "Salva"}
               </Button>
             </DialogFooter>
           </form>
