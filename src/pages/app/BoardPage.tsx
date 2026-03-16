@@ -89,14 +89,16 @@ export default function BoardPage() {
       const { data: owners } = ownerIds.length
         ? await supabase.from("users").select("id, full_name").in("id", ownerIds)
         : { data: [] };
-      const ownerMap = new Map(owners?.map((o) => [o.id, o.full_name]) ?? []);
+      const ownerMap = new Map<string, string>();
+      for (const o of owners ?? []) ownerMap.set(o.id, o.full_name);
 
       // Fetch linked KPI names
       const kpiIds = data.filter((t) => t.linked_kpi_id).map((t) => t.linked_kpi_id!);
       const { data: kpis } = kpiIds.length
         ? await supabase.from("kpi_definitions").select("id, name").in("id", kpiIds)
         : { data: [] };
-      const kpiMap = new Map(kpis?.map((k) => [k.id, k.name]) ?? []);
+      const kpiMap = new Map<string, string>();
+      for (const k of kpis ?? []) kpiMap.set(k.id, k.name);
 
       return data.map((t) => ({
         ...t,

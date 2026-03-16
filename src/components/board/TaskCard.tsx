@@ -74,9 +74,9 @@ export function TaskCard({ task, canDrag = false, isDragging = false, onStatusCh
 
         {/* Source */}
         {task.source === "ai_suggested" ? (
-          <Sparkles className="h-3 w-3 text-muted-foreground" title="AI Suggested" />
+          <Sparkles className="h-3 w-3 text-muted-foreground" />
         ) : (
-          <FileText className="h-3 w-3 text-muted-foreground" title="Pre-Meeting" />
+          <FileText className="h-3 w-3 text-muted-foreground" />
         )}
 
         {/* KPI link */}
