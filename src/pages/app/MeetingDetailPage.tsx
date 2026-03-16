@@ -221,7 +221,13 @@ export default function MeetingDetailPage() {
   }
 
   const m = meeting.data;
-  const sc = statusConfig[m.status] ?? statusConfig.draft;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const scheduled = new Date(m.scheduled_date);
+  scheduled.setHours(0, 0, 0, 0);
+  const isPast = today > scheduled;
+  const displayStatus = isPast ? "completed" : m.status;
+  const sc = statusConfig[displayStatus] ?? statusConfig.draft;
   const nextIdx = statusFlow.indexOf(m.status) + 1;
   const nextStatus = nextIdx < statusFlow.length ? statusFlow[nextIdx] : null;
   const hasTranscriptOrSummary = !!(m.transcript_url || m.summary_text);
@@ -263,8 +269,11 @@ export default function MeetingDetailPage() {
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
               )}
-              <Badge variant="secondary" className="inline-flex items-center text-xs gap-1.5">
-                <span className={`h-2 w-2 rounded-full ${sc.dotClass}`} />
+              <Badge
+                variant="secondary"
+                className={`inline-flex items-center text-xs gap-1.5 ${displayStatus === "completed" ? "bg-gray-800 text-white" : ""}`}
+              >
+                <span className={`h-2 w-2 rounded-full ${displayStatus === "completed" ? "bg-gray-300" : sc.dotClass}`} />
                 {sc.label}
               </Badge>
               <Badge variant="outline" className="inline-flex items-center text-xs font-mono">
