@@ -69,7 +69,7 @@ function PermissionsMatrix() {
               {p.access.map((has, i) => (
                 <TableCell key={i} className="text-center">
                   {has ? (
-                    <Check className="h-4 w-4 text-green-600 mx-auto" />
+                    <Check className="h-4 w-4 text-foreground mx-auto" />
                   ) : (
                     <Minus className="h-3 w-3 text-muted-foreground/40 mx-auto" />
                   )}
