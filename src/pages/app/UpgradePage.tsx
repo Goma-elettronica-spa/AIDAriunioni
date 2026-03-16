@@ -15,7 +15,7 @@ import {
 import { useDroppable } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Lightbulb, TrendingUp, Scissors, Link2, Download } from "lucide-react";
+import { Lightbulb, TrendingUp, Scissors, Link2, Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -43,6 +43,10 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { writeAuditLog } from "@/lib/audit";
 
@@ -316,7 +320,7 @@ export default function UpgradePage() {
   const [editReviewedValueAmount, setEditReviewedValueAmount] = useState<string>("");
   const [editReviewNote, setEditReviewNote] = useState("");
   const [editStatus, setEditStatus] = useState("");
-
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   // Create dialog state
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
@@ -598,6 +602,35 @@ export default function UpgradePage() {
         description: err.message,
         variant: "destructive",
       });
+    },
+  });
+
+  // Delete upgrade request mutation
+  const deleteUpgradeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase.from as any)("upgrade_requests")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["upgrade-requests"] });
+      if (selectedCard) {
+        writeAuditLog({
+          tenantId: tenantId!,
+          userId: user!.id,
+          action: "delete",
+          entityType: "upgrade_request",
+          entityId: selectedCard.id,
+          oldValues: { title: selectedCard.title },
+        });
+      }
+      setSelectedCard(null);
+      setDeleteConfirmOpen(false);
+      toast({ title: "Richiesta eliminata" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
     },
   });
 
@@ -1180,8 +1213,8 @@ Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
                 </div>
               )}
 
-              {/* Download .md button */}
-              <div className="border-t border-border pt-4">
+              {/* Download .md button + Delete */}
+              <div className="border-t border-border pt-4 space-y-2">
                 <Button
                   variant="outline"
                   className="w-full"
@@ -1190,11 +1223,42 @@ Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
                   <Download className="h-4 w-4 mr-2" />
                   Scarica .md
                 </Button>
+                {isIOAdmin && (
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={() => setDeleteConfirmOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Elimina
+                  </Button>
+                )}
               </div>
             </div>
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminare questa richiesta?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Questa azione è irreversibile. La richiesta di upgrade verrà eliminata definitivamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => selectedCard && deleteUpgradeMutation.mutate(selectedCard.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteUpgradeMutation.isPending ? "Eliminazione..." : "Elimina"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

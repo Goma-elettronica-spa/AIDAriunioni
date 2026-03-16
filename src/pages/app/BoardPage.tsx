@@ -12,7 +12,7 @@ import {
   type DragStartEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Plus, Sparkles, User } from "lucide-react";
+import { Plus, Sparkles, User, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -32,6 +32,10 @@ import { writeAuditLog } from "@/lib/audit";
 import { KanbanColumn } from "@/components/board/KanbanColumn";
 import { TaskCard } from "@/components/board/TaskCard";
 import { CreateTaskDialog } from "@/components/board/CreateTaskDialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export type BoardTask = {
   id: string;
@@ -123,6 +127,7 @@ export default function BoardPage() {
 
   // Subtask input state
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -363,6 +368,35 @@ export default function BoardPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["board-subtasks"] });
       queryClient.invalidateQueries({ queryKey: ["board-tasks"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
+  // Delete task mutation
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (taskId: string) => {
+      // Delete subtasks first
+      await supabase.from("board_tasks").delete().eq("parent_task_id", taskId);
+      const { error } = await supabase.from("board_tasks").delete().eq("id", taskId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["board-tasks"] });
+      if (selectedTask) {
+        writeAuditLog({
+          tenantId: tenantId!,
+          userId: user!.id,
+          action: "delete",
+          entityType: "board_task",
+          entityId: selectedTask.id,
+          oldValues: { title: selectedTask.title },
+        });
+      }
+      setSelectedTask(null);
+      setDeleteConfirmOpen(false);
+      toast({ title: "Task eliminato" });
     },
     onError: (err: Error) => {
       toast({ title: "Errore", description: err.message, variant: "destructive" });
@@ -796,18 +830,48 @@ export default function BoardPage() {
 
               {/* Save button */}
               {canEdit && (
-                <Button
-                  className="w-full"
-                  onClick={() => updateTaskMutation.mutate()}
-                  disabled={updateTaskMutation.isPending || !editTitle.trim()}
-                >
-                  {updateTaskMutation.isPending ? "Salvataggio..." : "Salva"}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1"
+                    onClick={() => updateTaskMutation.mutate()}
+                    disabled={updateTaskMutation.isPending || !editTitle.trim()}
+                  >
+                    {updateTaskMutation.isPending ? "Salvataggio..." : "Salva"}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    onClick={() => setDeleteConfirmOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               )}
             </div>
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminare questo task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Questa azione è irreversibile. Il task e tutti i sotto-task verranno eliminati.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => selectedTask && deleteTaskMutation.mutate(selectedTask.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteTaskMutation.isPending ? "Eliminazione..." : "Elimina"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
