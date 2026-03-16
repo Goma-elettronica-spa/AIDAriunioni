@@ -280,32 +280,6 @@ export default function MeetingDetailPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            {isAdmin && hasTranscriptOrSummary && (
-              <Button
-                className="bg-foreground text-background hover:bg-foreground/90"
-                size="sm"
-                onClick={() => {
-                  setActiveTab("tasks");
-                  setTriggerGenerate(true);
-                }}
-              >
-                <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                Claudietto generami i task
-              </Button>
-            )}
-            {isAdmin && nextStatus && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => statusMutation.mutate(nextStatus)}
-                disabled={statusMutation.isPending}
-              >
-                {statusConfig[nextStatus]?.label ?? nextStatus}
-                <ChevronRight className="h-3.5 w-3.5 ml-1" />
-              </Button>
-            )}
-          </div>
         </div>
       </div>
 
