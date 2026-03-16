@@ -1060,6 +1060,11 @@ export type Database = {
           owner_user_id: string
           position: number
           reason_why: string
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          reviewed_value_amount: number | null
+          reviewed_value_unit: string | null
           status: string
           tenant_id: string
           title: string
@@ -1077,6 +1082,11 @@ export type Database = {
           owner_user_id: string
           position?: number
           reason_why: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewed_value_amount?: number | null
+          reviewed_value_unit?: string | null
           status?: string
           tenant_id: string
           title: string
@@ -1094,6 +1104,11 @@ export type Database = {
           owner_user_id?: string
           position?: number
           reason_why?: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewed_value_amount?: number | null
+          reviewed_value_unit?: string | null
           status?: string
           tenant_id?: string
           title?: string
@@ -1126,6 +1141,13 @@ export type Database = {
           {
             foreignKeyName: "upgrade_requests_owner_user_id_fkey"
             columns: ["owner_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upgrade_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -1261,6 +1283,41 @@ export type Database = {
           },
           {
             foreignKeyName: "users_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      value_unit_options: {
+        Row: {
+          created_at: string
+          id: string
+          is_global: boolean
+          key: string
+          label: string
+          tenant_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_global?: boolean
+          key: string
+          label: string
+          tenant_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_global?: boolean
+          key?: string
+          label?: string
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "value_unit_options_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
