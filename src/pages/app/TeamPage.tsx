@@ -30,7 +30,7 @@ type UserRow = {
 
 type JoinRequest = {
   id: string;
-  user_auth_id: string;
+  user_id: string;
   email: string;
   full_name: string;
   status: string;
@@ -102,7 +102,7 @@ export default function TeamPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("join_requests")
-        .select("id, user_auth_id, email, full_name, status, created_at")
+        .select("id, user_id, email, full_name, status, created_at")
         .eq("tenant_id", tenantId!)
         .eq("status", "pending")
         .order("created_at", { ascending: true });
@@ -201,7 +201,7 @@ export default function TeamPage() {
 
       // 2. Create user record in users table
       const { error: userError } = await supabase.from("users").insert({
-        id: request.user_auth_id,
+        id: request.user_id,
         email: request.email,
         full_name: request.full_name,
         role: "dirigente",
