@@ -181,15 +181,6 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl, summaryT
   }, [triggerGenerate]);
 
   const generateSuggestedTasks = async () => {
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY || "";
-    if (!apiKey) {
-      toast({
-        title: "Configura la chiave API Anthropic nelle variabili d'ambiente (VITE_ANTHROPIC_API_KEY)",
-        variant: "destructive",
-      });
-      return;
-    }
-
     // Gather the text to analyze: prefer transcript, fall back to summary_text
     let transcriptText = "";
 
@@ -221,54 +212,27 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl, summaryT
 
     setGenerating(true);
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
+      const { data: fnData, error: fnError } = await supabase.functions.invoke("suggest-tasks", {
+        body: {
+          transcriptText,
+          users: users.map((u) => ({ full_name: u.full_name, job_title: u.job_title })),
         },
-        body: JSON.stringify({
-          model: "claude-opus-4-6",
-          max_tokens: 2048,
-          messages: [
-            {
-              role: "user",
-              content: `Analizza questa trascrizione di una riunione dirigenziale e suggerisci 3-7 task operativi concreti.
-
-Per ogni task indica:
-- title: titolo breve e specifico del task
-- description: descrizione di cosa fare (1-2 frasi)
-- suggested_role: il ruolo aziendale piu' adatto (es. "Direttore Commerciale", "CFO", "CTO", "HR Manager")
-
-I ruoli disponibili nell'organizzazione sono:
-${users.map((u) => `- ${u.full_name}: ${u.job_title || "Nessun ruolo"}`).join("\n")}
-
-Rispondi SOLO con un array JSON valido, senza altro testo. Esempio:
-[{"title":"...","description":"...","suggested_role":"..."}]
-
-TRASCRIZIONE:
-${transcriptText}`,
-            },
-          ],
-        }),
       });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => null);
-        throw new Error(
-          errData?.error?.message || `Errore API Anthropic: ${response.status} ${response.statusText}`,
-        );
-      }
+      if (fnError) throw new Error(fnError.message || "Errore chiamata AI");
+      if (fnData?.error) throw new Error(fnData.error);
 
-      const data = await response.json();
-      const content = data.content[0].text;
-      const suggestedTasksFromAI = JSON.parse(content) as Array<{
+      const suggestedTasksFromAI = fnData.tasks as Array<{
         title: string;
         description: string;
         suggested_role: string;
       }>;
+
+      if (!suggestedTasksFromAI?.length) {
+        toast({ title: "Nessun task suggerito dall'AI", variant: "destructive" });
+        setGenerating(false);
+        return;
+      }
 
       const inserts = suggestedTasksFromAI.map((t) => ({
         meeting_id: meetingId,
@@ -293,7 +257,7 @@ ${transcriptText}`,
           newValues: { title: t.title, suggested_role: t.suggested_role },
         });
       }
-      toast({ title: "Task suggeriti generati" });
+      toast({ title: "Task suggeriti generati con successo!" });
     } catch (err: any) {
       toast({ title: "Errore generazione", description: err.message, variant: "destructive" });
     }

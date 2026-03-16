@@ -1,1 +1,4 @@
 project_id = "luljyhqkdpwbyujqswmn"
+
+[functions.suggest-tasks]
+verify_jwt = false
