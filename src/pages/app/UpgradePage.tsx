@@ -1213,8 +1213,8 @@ Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
                 </div>
               )}
 
-              {/* Download .md button */}
-              <div className="border-t border-border pt-4">
+              {/* Download .md button + Delete */}
+              <div className="border-t border-border pt-4 space-y-2">
                 <Button
                   variant="outline"
                   className="w-full"
@@ -1223,11 +1223,42 @@ Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
                   <Download className="h-4 w-4 mr-2" />
                   Scarica .md
                 </Button>
+                {isIOAdmin && (
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={() => setDeleteConfirmOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Elimina
+                  </Button>
+                )}
               </div>
             </div>
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminare questa richiesta?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Questa azione è irreversibile. La richiesta di upgrade verrà eliminata definitivamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => selectedCard && deleteUpgradeMutation.mutate(selectedCard.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteUpgradeMutation.isPending ? "Eliminazione..." : "Elimina"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
