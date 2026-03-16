@@ -24,6 +24,7 @@ import BoardPage from "@/pages/app/BoardPage";
 import TeamPage from "@/pages/app/TeamPage";
 import AuditLogPage from "@/pages/app/AuditLogPage";
 import BriefPage from "@/pages/app/BriefPage";
+import MyKpisPage from "@/pages/app/MyKpisPage";
 
 const queryClient = new QueryClient();
 
@@ -65,6 +66,7 @@ const App = () => (
               }
             >
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/my-kpis" element={<MyKpisPage />} />
               <Route path="/meetings" element={<MeetingsPage />} />
               <Route path="/meetings/:id/pre-meeting" element={<PreMeetingPage />} />
               <Route path="/meetings/:id/brief" element={<BriefPage />} />

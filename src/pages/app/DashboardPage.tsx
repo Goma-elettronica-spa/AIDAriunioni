@@ -9,6 +9,8 @@ import {
   ListTodo,
   TrendingDown,
   ArrowRight,
+  ArrowUp,
+  ArrowDown,
   Plus,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -122,6 +124,62 @@ export default function DashboardPage() {
         .eq("is_improved", false);
       if (error) throw error;
       return count ?? 0;
+    },
+  });
+
+  // User's top KPIs (by largest absolute delta)
+  const myTopKpis = useQuery({
+    queryKey: ["dashboard-my-top-kpis", user?.id, tenantId],
+    enabled: !!user?.id && !!tenantId,
+    queryFn: async () => {
+      // Fetch user's active KPI definitions
+      const { data: defs, error: defsErr } = await supabase
+        .from("kpi_definitions")
+        .select("id, name, unit")
+        .eq("user_id", user!.id)
+        .eq("is_active", true);
+      if (defsErr) throw defsErr;
+      if (!defs?.length) return [];
+
+      const kpiIds = defs.map((d) => d.id);
+
+      // For each KPI, get the latest entry
+      const { data: entries, error: entriesErr } = await supabase
+        .from("kpi_entries")
+        .select("id, kpi_id, current_value, delta, delta_percent, is_improved, meeting_id, meetings(scheduled_date)")
+        .in("kpi_id", kpiIds)
+        .order("meetings(scheduled_date)", { ascending: false });
+      if (entriesErr) throw entriesErr;
+      if (!entries?.length) return [];
+
+      // Get the latest entry per KPI
+      const latestByKpi = new Map<string, any>();
+      for (const e of entries) {
+        if (!latestByKpi.has(e.kpi_id)) {
+          latestByKpi.set(e.kpi_id, e);
+        }
+      }
+
+      // Build results and sort by absolute delta
+      const results = defs
+        .map((d) => {
+          const entry = latestByKpi.get(d.id);
+          if (!entry) return null;
+          return {
+            id: d.id,
+            name: d.name,
+            unit: d.unit,
+            current_value: entry.current_value as number,
+            delta: entry.delta as number | null,
+            delta_percent: entry.delta_percent as number | null,
+            is_improved: entry.is_improved as boolean | null,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null)
+        .sort((a, b) => Math.abs(b.delta ?? 0) - Math.abs(a.delta ?? 0))
+        .slice(0, 3);
+
+      return results;
     },
   });
 
@@ -283,6 +341,60 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* My Top KPIs */}
+      {myTopKpis.data && myTopKpis.data.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-foreground">I tuoi KPI</h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => navigate("/my-kpis")}
+            >
+              Vedi tutti i tuoi KPI
+              <ArrowRight className="h-3.5 w-3.5 ml-1" />
+            </Button>
+          </div>
+          <div className="border border-border rounded-lg divide-y divide-border">
+            {myTopKpis.data.map((kpi) => {
+              const improved = kpi.is_improved === true;
+              const colorClass = improved ? "text-emerald-600" : "text-red-600";
+              const DeltaIcon = improved ? ArrowUp : ArrowDown;
+              return (
+                <div
+                  key={kpi.id}
+                  className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer"
+                  onClick={() => navigate("/my-kpis")}
+                >
+                  <p className="text-sm font-medium text-foreground truncate min-w-0 flex-1">
+                    {kpi.name}
+                  </p>
+                  <div className="flex items-center gap-4 shrink-0 ml-4">
+                    <span className="text-sm font-mono font-semibold text-foreground">
+                      {kpi.current_value.toLocaleString("it-IT")}
+                      {kpi.unit === "%" || kpi.unit === "percent" ? "%" : kpi.unit === "EUR" || kpi.unit === "eur" ? " €" : ` ${kpi.unit}`}
+                    </span>
+                    {kpi.delta != null && (
+                      <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${colorClass}`}>
+                        <DeltaIcon className="h-3 w-3" />
+                        {kpi.delta > 0 ? "+" : ""}
+                        {kpi.delta.toLocaleString("it-IT")}
+                        {kpi.delta_percent != null && (
+                          <span className="ml-0.5">
+                            ({kpi.delta_percent > 0 ? "+" : ""}{kpi.delta_percent.toFixed(1)}%)
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Next Meeting Card */}
       <div>

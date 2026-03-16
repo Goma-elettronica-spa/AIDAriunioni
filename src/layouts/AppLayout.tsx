@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   LogOut,
   Menu,
+  TrendingUp,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import { useState, useMemo } from "react";
 
 const allNavItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, roles: null },
+  { title: "I Miei KPI", url: "/my-kpis", icon: TrendingUp, roles: ["org_admin", "information_officer", "dirigente"] as string[] },
   { title: "Riunioni", url: "/meetings", icon: CalendarDays, roles: null },
   { title: "Board", url: "/board", icon: Columns3, roles: null },
   { title: "Team", url: "/team", icon: Users, roles: ["org_admin"] as string[] },
