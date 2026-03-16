@@ -59,6 +59,7 @@ const App = () => (
               <Route path="/superadmin/dashboard" element={<SuperadminDashboard />} />
               <Route path="/superadmin/tenants" element={<Tenants />} />
               <Route path="/superadmin/tenants/:id" element={<TenantDetail />} />
+              <Route path="/superadmin/permissions" element={<PermissionsPage />} />
             </Route>
 
             {/* App routes */}
