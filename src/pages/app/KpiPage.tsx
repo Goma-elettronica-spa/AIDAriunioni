@@ -33,6 +33,7 @@ interface KpiDef {
   unit: string;
   direction: string;
   target_value: number | null;
+  functional_area_id: string;
 }
 
 interface KpiEntryWithMeeting {
@@ -55,6 +56,11 @@ interface VarianceExplanation {
   delta_portion: number | null;
   delta_portion_percent: number | null;
   direction: string;
+}
+
+interface AreaInfo {
+  id: string;
+  name: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -112,12 +118,14 @@ function KpiCard({
   varianceMap,
   expanded,
   onToggle,
+  areaName,
 }: {
   kpi: KpiDef;
   entries: KpiEntryWithMeeting[];
   varianceMap: Map<string, VarianceExplanation[]>;
   expanded: boolean;
   onToggle: () => void;
+  areaName?: string;
 }) {
   const latest = entries[0] ?? null;
   const sparkValues = entries
@@ -142,9 +150,16 @@ function KpiCard({
         <CardContent className="p-6">
           <div className="flex items-start justify-between mb-2">
             <div>
-              <p className="text-sm text-muted-foreground">
-                {kpi.name} ({kpi.unit})
-              </p>
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-sm text-muted-foreground">
+                  {kpi.name} ({kpi.unit})
+                </p>
+                {areaName && (
+                  <Badge variant="outline" className="inline-flex items-center text-[10px]">
+                    {areaName}
+                  </Badge>
+                )}
+              </div>
               {latest ? (
                 <p className="text-2xl font-bold text-foreground mt-1">
                   {formatNumber(latest.current_value, kpi.unit)}
@@ -320,6 +335,7 @@ function MiniKpiCard({
     unit: string;
     latest: any;
     sparkValues: number[];
+    areaName?: string;
   };
   expanded: boolean;
   onToggle: () => void;
@@ -338,9 +354,16 @@ function MiniKpiCard({
         <CardContent className="p-6">
           <div className="flex items-start justify-between mb-2">
             <div className="min-w-0 flex-1">
-              <p className="text-sm text-muted-foreground truncate">
-                {kpi.name} ({kpi.unit})
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-muted-foreground truncate">
+                  {kpi.name} ({kpi.unit})
+                </p>
+                {kpi.areaName && (
+                  <Badge variant="outline" className="inline-flex items-center text-[10px] shrink-0">
+                    {kpi.areaName}
+                  </Badge>
+                )}
+              </div>
               {latest ? (
                 <p className="text-2xl font-bold text-foreground mt-1">
                   {formatNumber(latest.current_value, kpi.unit)}
@@ -387,19 +410,41 @@ function MiniKpiCard({
   );
 }
 
-// ─── Section 1: I tuoi KPI (personal) ────────────────────────────────────────
+// ─── Section 1: I tuoi KPI (personal, grouped by area) ───────────────────────
 
-function PersonalKpiSection({ userId }: { userId: string }) {
+function PersonalKpiSection({ userId, tenantId }: { userId: string; tenantId: string }) {
   const [expandedKpiId, setExpandedKpiId] = useState<string | null>(null);
 
-  const kpiDefs = useQuery({
-    queryKey: ["kpi-page-personal-defs", userId],
+  // Fetch user's functional areas
+  const userAreas = useQuery({
+    queryKey: ["kpi-page-personal-areas", userId],
     enabled: !!userId,
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("user_functional_areas")
+        .select("functional_area_id, functional_areas(id, name)")
+        .eq("user_id", userId);
+      if (error) throw error;
+      return (data ?? []) as { functional_area_id: string; functional_areas: { id: string; name: string } }[];
+    },
+  });
+
+  const areaIds = useMemo(() => userAreas.data?.map((a) => a.functional_area_id) ?? [], [userAreas.data]);
+  const areaMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of userAreas.data ?? []) {
+      m.set(a.functional_area_id, a.functional_areas?.name ?? "");
+    }
+    return m;
+  }, [userAreas.data]);
+
+  const kpiDefs = useQuery({
+    queryKey: ["kpi-page-personal-defs", userId, areaIds],
+    enabled: areaIds.length > 0,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("kpi_definitions")
-        .select("id, name, description, unit, direction, target_value")
-        .eq("user_id", userId)
+        .select("id, name, description, unit, direction, target_value, functional_area_id")
+        .in("functional_area_id", areaIds)
         .eq("is_active", true)
         .order("name");
       if (error) throw error;
@@ -408,7 +453,7 @@ function PersonalKpiSection({ userId }: { userId: string }) {
   });
 
   const kpiEntries = useQuery({
-    queryKey: ["kpi-page-personal-entries", kpiDefs.data?.map((k) => k.id)],
+    queryKey: ["kpi-page-personal-entries", kpiDefs.data?.map((k) => k.id), userId],
     enabled: !!kpiDefs.data && kpiDefs.data.length > 0,
     queryFn: async () => {
       const kpiIds = kpiDefs.data!.map((k) => k.id);
@@ -416,6 +461,7 @@ function PersonalKpiSection({ userId }: { userId: string }) {
         .from("kpi_entries")
         .select("id, kpi_id, current_value, previous_value, delta, delta_percent, is_improved, meeting_id, meetings(title, scheduled_date)")
         .in("kpi_id", kpiIds)
+        .eq("user_id", userId)
         .order("meetings(scheduled_date)", { ascending: false });
       if (error) throw error;
       return (data ?? []).map((row: any) => ({
@@ -470,7 +516,18 @@ function PersonalKpiSection({ userId }: { userId: string }) {
     return map;
   }, [varianceExplanations.data]);
 
-  const isLoading = kpiDefs.isLoading || kpiEntries.isLoading;
+  // Group KPIs by area
+  const kpisByArea = useMemo(() => {
+    const map = new Map<string, KpiDef[]>();
+    for (const kpi of kpiDefs.data ?? []) {
+      const list = map.get(kpi.functional_area_id) ?? [];
+      list.push(kpi);
+      map.set(kpi.functional_area_id, list);
+    }
+    return map;
+  }, [kpiDefs.data]);
+
+  const isLoading = userAreas.isLoading || kpiDefs.isLoading || kpiEntries.isLoading;
 
   return (
     <div>
@@ -500,18 +557,30 @@ function PersonalKpiSection({ userId }: { userId: string }) {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {kpiDefs.data.map((kpi) => (
-            <KpiCard
-              key={kpi.id}
-              kpi={kpi}
-              entries={entriesByKpi.get(kpi.id) ?? []}
-              varianceMap={varianceMap}
-              expanded={expandedKpiId === kpi.id}
-              onToggle={() =>
-                setExpandedKpiId(expandedKpiId === kpi.id ? null : kpi.id)
-              }
-            />
+        <div className="space-y-6">
+          {Array.from(kpisByArea.entries()).map(([areaId, areaKpis]) => (
+            <div key={areaId}>
+              <h3 className="text-sm font-bold text-foreground mb-3">
+                <Badge variant="outline" className="inline-flex items-center text-xs">
+                  {areaMap.get(areaId) ?? "Area"}
+                </Badge>
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {areaKpis.map((kpi) => (
+                  <KpiCard
+                    key={kpi.id}
+                    kpi={kpi}
+                    entries={entriesByKpi.get(kpi.id) ?? []}
+                    varianceMap={varianceMap}
+                    expanded={expandedKpiId === kpi.id}
+                    onToggle={() =>
+                      setExpandedKpiId(expandedKpiId === kpi.id ? null : kpi.id)
+                    }
+                    areaName={areaMap.get(kpi.functional_area_id)}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -519,16 +588,23 @@ function PersonalKpiSection({ userId }: { userId: string }) {
   );
 }
 
-// ─── Section 2: KPI Aziendali (aggregate) ────────────────────────────────────
+// ─── Section 2: KPI Aziendali (aggregate, grouped by area) ───────────────────
 
 function AggregateKpiSection({ tenantId }: { tenantId: string }) {
   const aggregateKpis = useQuery({
     queryKey: ["kpi-page-aggregate", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
+      // Fetch all areas
+      const { data: areasData, error: areasErr } = await (supabase.from as any)("functional_areas")
+        .select("id, name")
+        .eq("tenant_id", tenantId);
+      if (areasErr) throw areasErr;
+      const areas = (areasData ?? []) as AreaInfo[];
+
       const { data: defs, error: defsErr } = await supabase
         .from("kpi_definitions")
-        .select("id, name, unit")
+        .select("id, name, unit, functional_area_id")
         .eq("tenant_id", tenantId)
         .eq("is_active", true);
       if (defsErr) throw defsErr;
@@ -543,60 +619,73 @@ function AggregateKpiSection({ tenantId }: { tenantId: string }) {
         .order("meetings(scheduled_date)", { ascending: true });
       if (entriesErr) throw entriesErr;
 
+      const areaMap = new Map(areas.map((a) => [a.id, a.name]));
       const defMap = new Map(defs.map((d) => [d.id, d]));
-      const byName = new Map<string, { unit: string; values: number[] }>();
+
+      // Group by area, then by KPI name
+      const byAreaKpi = new Map<string, Map<string, { unit: string; values: number[]; dateBuckets: Map<string, number[]> }>>();
 
       for (const entry of entries ?? []) {
         const def = defMap.get(entry.kpi_id);
         if (!def) continue;
-        const existing = byName.get(def.name) ?? { unit: def.unit, values: [] };
-        existing.values.push(entry.current_value);
-        byName.set(def.name, existing);
-      }
-
-      const entriesByName = new Map<string, { date: string; values: number[] }[]>();
-      for (const entry of entries ?? []) {
-        const def = defMap.get(entry.kpi_id);
-        if (!def) continue;
+        const areaId = (def as any).functional_area_id ?? "unknown";
+        if (!byAreaKpi.has(areaId)) byAreaKpi.set(areaId, new Map());
+        const areaKpis = byAreaKpi.get(areaId)!;
+        if (!areaKpis.has(def.name)) areaKpis.set(def.name, { unit: def.unit, values: [], dateBuckets: new Map() });
+        const kpiData = areaKpis.get(def.name)!;
+        kpiData.values.push(entry.current_value);
         const meetingDate = (entry as any).meetings?.scheduled_date ?? "";
-        const list = entriesByName.get(def.name) ?? [];
-        let bucket = list.find((b) => b.date === meetingDate);
-        if (!bucket) {
-          bucket = { date: meetingDate, values: [] };
-          list.push(bucket);
-        }
-        bucket.values.push(entry.current_value);
-        entriesByName.set(def.name, list);
+        if (!kpiData.dateBuckets.has(meetingDate)) kpiData.dateBuckets.set(meetingDate, []);
+        kpiData.dateBuckets.get(meetingDate)!.push(entry.current_value);
       }
 
       const results: {
-        name: string;
-        unit: string;
-        avgValue: number;
-        sparklineValues: number[];
-        totalEntries: number;
+        areaId: string;
+        areaName: string;
+        kpis: {
+          name: string;
+          unit: string;
+          avgValue: number;
+          sparklineValues: number[];
+          totalEntries: number;
+        }[];
       }[] = [];
 
-      for (const [name, data] of byName) {
-        const allVals = data.values;
-        const avg = allVals.reduce((a, b) => a + b, 0) / allVals.length;
+      for (const [areaId, areaKpis] of byAreaKpi) {
+        const kpis: typeof results[0]["kpis"] = [];
+        for (const [name, data] of areaKpis) {
+          const avg = data.values.reduce((a, b) => a + b, 0) / data.values.length;
+          const dateBuckets = Array.from(data.dateBuckets.entries())
+            .sort(([a], [b]) => a.localeCompare(b));
+          const sparklineValues = dateBuckets.map(
+            ([, vals]) => vals.reduce((a, c) => a + c, 0) / vals.length
+          ).slice(-12);
 
-        const dateBuckets = entriesByName.get(name) ?? [];
-        dateBuckets.sort((a, b) => a.date.localeCompare(b.date));
-        const sparklineValues = dateBuckets.map(
-          (b) => b.values.reduce((a, c) => a + c, 0) / b.values.length
-        );
-
+          kpis.push({
+            name,
+            unit: data.unit,
+            avgValue: avg,
+            sparklineValues,
+            totalEntries: data.values.length,
+          });
+        }
+        kpis.sort((a, b) => a.name.localeCompare(b.name));
         results.push({
-          name,
-          unit: data.unit,
-          avgValue: avg,
-          sparklineValues: sparklineValues.slice(-12),
-          totalEntries: allVals.length,
+          areaId,
+          areaName: areaMap.get(areaId) ?? "Area",
+          kpis,
         });
       }
 
-      return results.sort((a, b) => a.name.localeCompare(b.name));
+      // Also add areas with defs but no entries yet
+      for (const def of defs) {
+        const areaId = (def as any).functional_area_id;
+        if (!byAreaKpi.has(areaId)) {
+          // area has defs but no entries -- skip (already empty)
+        }
+      }
+
+      return results.sort((a, b) => a.areaName.localeCompare(b.areaName));
     },
   });
 
@@ -623,28 +712,39 @@ function AggregateKpiSection({ tenantId }: { tenantId: string }) {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {aggregateKpis.data.map((kpi) => (
-            <Card key={kpi.name} className="border border-border">
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-muted-foreground truncate">{kpi.name}</p>
-                    <p className="text-2xl font-bold text-foreground mt-1">
-                      {formatNumber(Math.round(kpi.avgValue * 100) / 100, kpi.unit)}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Media su {kpi.totalEntries} rilevazioni
-                    </p>
-                  </div>
-                  {kpi.sparklineValues.length > 1 && (
-                    <div className="text-muted-foreground shrink-0 ml-3">
-                      <Sparkline values={kpi.sparklineValues} width={120} height={32} />
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+        <div className="space-y-6">
+          {aggregateKpis.data.map((areaGroup) => (
+            <div key={areaGroup.areaId}>
+              <h3 className="text-sm font-bold text-foreground mb-3">
+                <Badge variant="outline" className="inline-flex items-center text-xs">
+                  {areaGroup.areaName}
+                </Badge>
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {areaGroup.kpis.map((kpi) => (
+                  <Card key={kpi.name} className="border border-border">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-muted-foreground truncate">{kpi.name}</p>
+                          <p className="text-2xl font-bold text-foreground mt-1">
+                            {formatNumber(Math.round(kpi.avgValue * 100) / 100, kpi.unit)}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Media su {kpi.totalEntries} rilevazioni
+                          </p>
+                        </div>
+                        {kpi.sparklineValues.length > 1 && (
+                          <div className="text-muted-foreground shrink-0 ml-3">
+                            <Sparkline values={kpi.sparklineValues} width={120} height={32} />
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -652,7 +752,7 @@ function AggregateKpiSection({ tenantId }: { tenantId: string }) {
   );
 }
 
-// ─── Section 3: KPI per Persona (all users stacked) ──────────────────────────
+// ─── Section 3: KPI per Persona (all users stacked, by area) ─────────────────
 
 function AllUsersKpiSection({ tenantId }: { tenantId: string }) {
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
@@ -661,66 +761,103 @@ function AllUsersKpiSection({ tenantId }: { tenantId: string }) {
     queryKey: ["kpi-page-all-users", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
+      // Fetch all areas
+      const { data: areasData, error: areasErr } = await (supabase.from as any)("functional_areas")
+        .select("id, name")
+        .eq("tenant_id", tenantId);
+      if (areasErr) throw areasErr;
+      const areaMap = new Map<string, string>((areasData ?? []).map((a: any) => [a.id, a.name]));
+
+      // Fetch user_functional_areas
+      const { data: ufaData, error: ufaErr } = await (supabase.from as any)("user_functional_areas")
+        .select("user_id, functional_area_id")
+        .eq("tenant_id", tenantId);
+      if (ufaErr) throw ufaErr;
+      const userAreasMap = new Map<string, string[]>();
+      for (const ufa of ufaData ?? []) {
+        const list = userAreasMap.get(ufa.user_id) ?? [];
+        list.push(ufa.functional_area_id);
+        userAreasMap.set(ufa.user_id, list);
+      }
+
+      // Fetch all KPI definitions by area
       const { data: defs, error: defsErr } = await supabase
         .from("kpi_definitions")
-        .select("id, name, description, unit, direction, target_value, user_id, users(full_name)")
+        .select("id, name, description, unit, direction, target_value, functional_area_id")
         .eq("tenant_id", tenantId)
         .eq("is_active", true)
         .order("name");
       if (defsErr) throw defsErr;
-      if (!defs?.length) return [];
 
-      const kpiIds = defs.map((d) => d.id);
+      const kpiIds = (defs ?? []).map((d) => d.id);
 
-      const { data: entries, error: entriesErr } = await supabase
-        .from("kpi_entries")
-        .select("id, kpi_id, current_value, delta, delta_percent, is_improved, meeting_id, meetings(scheduled_date)")
-        .in("kpi_id", kpiIds)
-        .order("meetings(scheduled_date)", { ascending: false });
+      // Fetch all entries
+      const { data: entries, error: entriesErr } = kpiIds.length > 0
+        ? await supabase
+            .from("kpi_entries")
+            .select("id, kpi_id, user_id, current_value, delta, delta_percent, is_improved, meeting_id, meetings(scheduled_date)")
+            .in("kpi_id", kpiIds)
+            .order("meetings(scheduled_date)", { ascending: false })
+        : { data: [], error: null };
       if (entriesErr) throw entriesErr;
 
-      const entriesByKpi = new Map<string, any[]>();
+      // Build entries by (kpi_id, user_id)
+      const entriesByKpiUser = new Map<string, any[]>();
       for (const e of entries ?? []) {
-        const list = entriesByKpi.get(e.kpi_id) ?? [];
+        const key = `${e.kpi_id}:${e.user_id}`;
+        const list = entriesByKpiUser.get(key) ?? [];
         list.push(e);
-        entriesByKpi.set(e.kpi_id, list);
+        entriesByKpiUser.set(key, list);
       }
 
-      const byUser = new Map<string, { userName: string; kpis: any[] }>();
-      for (const d of defs) {
-        const userId = d.user_id;
-        const userName = (d as any).users?.full_name ?? "Utente sconosciuto";
-        if (!byUser.has(userId)) {
-          byUser.set(userId, { userName, kpis: [] });
-        }
-        const kpiEntries = entriesByKpi.get(d.id) ?? [];
-        const latest = kpiEntries[0] ?? null;
-        const sparkValues = kpiEntries
-          .slice()
-          .reverse()
-          .slice(-12)
-          .map((e: any) => e.current_value);
-        byUser.get(userId)!.kpis.push({
-          id: d.id,
-          name: d.name,
-          description: d.description,
-          unit: d.unit,
-          latest,
-          sparkValues,
-        });
+      // Build KPI map by area
+      const defsByArea = new Map<string, typeof defs>();
+      for (const d of defs ?? []) {
+        const areaId = (d as any).functional_area_id;
+        const list = defsByArea.get(areaId) ?? [];
+        list.push(d);
+        defsByArea.set(areaId, list);
       }
 
-      // Include users with no KPIs
+      // Fetch all users
       const { data: allUsers } = await supabase
         .from("users")
         .select("id, full_name")
         .eq("tenant_id", tenantId)
         .eq("is_active", true)
         .order("full_name");
+
+      // Build result: per user, show their areas' KPIs with their entries
+      const byUser = new Map<string, { userName: string; kpis: any[] }>();
+
       for (const u of allUsers ?? []) {
-        if (!byUser.has(u.id)) {
-          byUser.set(u.id, { userName: u.full_name, kpis: [] });
+        const uAreas = userAreasMap.get(u.id) ?? [];
+        const kpis: any[] = [];
+
+        for (const areaId of uAreas) {
+          const areaDefs = defsByArea.get(areaId) ?? [];
+          for (const d of areaDefs) {
+            const key = `${d.id}:${u.id}`;
+            const kpiEntries = entriesByKpiUser.get(key) ?? [];
+            const latest = kpiEntries[0] ?? null;
+            const sparkValues = kpiEntries
+              .slice()
+              .reverse()
+              .slice(-12)
+              .map((e: any) => e.current_value);
+            kpis.push({
+              id: `${d.id}-${u.id}`,
+              name: d.name,
+              description: d.description,
+              unit: d.unit,
+              latest,
+              sparkValues,
+              areaName: areaMap.get(areaId) ?? "",
+            });
+          }
         }
+
+        byUser.set(u.id, { userName: u.full_name, kpis });
       }
 
       return Array.from(byUser.entries())
@@ -947,7 +1084,7 @@ export default function KpiPage() {
       </div>
 
       {/* Section 1: Personal KPIs (always shown) */}
-      {userId && <PersonalKpiSection userId={userId} />}
+      {userId && tenantId && <PersonalKpiSection userId={userId} tenantId={tenantId} />}
 
       {/* Section 2: Aggregate KPIs */}
       {tenantId && <AggregateKpiSection tenantId={tenantId} />}

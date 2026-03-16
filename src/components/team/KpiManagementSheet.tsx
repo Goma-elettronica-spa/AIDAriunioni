@@ -36,8 +36,8 @@ import {
 interface KpiManagementSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  userId: string;
-  userName: string;
+  areaId: string;
+  areaName: string;
   tenantId: string;
 }
 
@@ -50,7 +50,7 @@ type KpiRow = {
   target_value: number | null;
   is_active: boolean;
   is_required: boolean;
-  user_id: string;
+  functional_area_id: string;
   tenant_id: string;
   created_at: string;
   updated_at: string;
@@ -83,8 +83,8 @@ function formatTarget(value: number | null, unit: string): string {
 export default function KpiManagementSheet({
   open,
   onOpenChange,
-  userId,
-  userName,
+  areaId,
+  areaName,
   tenantId,
 }: KpiManagementSheetProps) {
   const { user: authUser } = useAuth();
@@ -97,13 +97,13 @@ export default function KpiManagementSheet({
   const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
 
   const kpis = useQuery({
-    queryKey: ["kpi-definitions", userId, tenantId],
-    enabled: !!userId && !!tenantId && open,
+    queryKey: ["kpi-definitions", areaId, tenantId],
+    enabled: !!areaId && !!tenantId && open,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("kpi_definitions")
         .select("*")
-        .eq("user_id", userId)
+        .eq("functional_area_id", areaId)
         .eq("tenant_id", tenantId)
         .eq("is_active", true)
         .order("created_at", { ascending: true });
@@ -121,13 +121,13 @@ export default function KpiManagementSheet({
         direction: form.direction,
         target_value: form.target_value.trim() ? Number(form.target_value) : null,
         is_required: form.is_required,
-        user_id: userId,
+        functional_area_id: areaId,
         tenant_id: tenantId,
       });
       if (error) throw error;
     },
     onSuccess: (_data, form) => {
-      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", userId, tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId, tenantId] });
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
       writeAuditLog({
@@ -136,7 +136,7 @@ export default function KpiManagementSheet({
         action: "create",
         entityType: "kpi_definition",
         entityId: crypto.randomUUID(),
-        newValues: { name: form.name, unit: form.unit, direction: form.direction, target_value: form.target_value || null },
+        newValues: { name: form.name, unit: form.unit, direction: form.direction, target_value: form.target_value || null, functional_area_id: areaId },
       });
       setShowCreateForm(false);
       setCreateForm(emptyForm);
@@ -163,7 +163,7 @@ export default function KpiManagementSheet({
       if (error) throw error;
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", userId, tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId, tenantId] });
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
       const oldKpi = activeKpis.find((k) => k.id === variables.id);
@@ -194,7 +194,7 @@ export default function KpiManagementSheet({
       if (error) throw error;
     },
     onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", userId, tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId, tenantId] });
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
       writeAuditLog({
@@ -226,7 +226,7 @@ export default function KpiManagementSheet({
       if (error) throw error;
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", userId, tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId, tenantId] });
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       const kpi = activeKpis.find((k) => k.id === variables.id);
       writeAuditLog({
@@ -276,7 +276,7 @@ export default function KpiManagementSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-lg overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>KPI di {userName}</SheetTitle>
+          <SheetTitle>KPI di {areaName}</SheetTitle>
           <SheetDescription>
             {activeCount > 0
               ? `${activeCount} KPI attiv${activeCount === 1 ? "o" : "i"}`
@@ -289,7 +289,7 @@ export default function KpiManagementSheet({
           {!kpis.isLoading && activeCount === 0 && !showCreateForm && (
             <div className="text-center py-8 border border-dashed border-border rounded-lg">
               <p className="text-sm text-muted-foreground">
-                Nessun KPI definito per {userName}. Aggiungi il primo KPI.
+                Nessun KPI definito per {areaName}. Aggiungi il primo KPI.
               </p>
             </div>
           )}

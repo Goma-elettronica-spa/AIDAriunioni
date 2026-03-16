@@ -72,7 +72,7 @@ type KpiDef = {
   target_value: number | null;
   is_active: boolean;
   is_required: boolean;
-  user_id: string;
+  functional_area_id: string;
   tenant_id: string;
   created_at: string;
   updated_at: string;
@@ -528,8 +528,8 @@ export default function TeamPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editRole, setEditRole] = useState("");
 
-  // KPI sheet
-  const [kpiUser, setKpiUser] = useState<{ id: string; name: string } | null>(null);
+  // KPI management sheet — now area-based
+  const [kpiArea, setKpiArea] = useState<{ id: string; name: string } | null>(null);
 
   // New area inline
   const [newAreaName, setNewAreaName] = useState("");
@@ -669,20 +669,49 @@ export default function TeamPage() {
     return map;
   }, [users.data]);
 
-  const kpisByUser = useMemo(() => {
+  // Map: areaId -> KpiDef[]
+  const kpisByArea = useMemo(() => {
     const map: Record<string, KpiDef[]> = {};
     for (const kpi of allKpis.data ?? []) {
-      if (!map[kpi.user_id]) map[kpi.user_id] = [];
-      map[kpi.user_id].push(kpi);
+      const areaId = kpi.functional_area_id;
+      if (!map[areaId]) map[areaId] = [];
+      map[areaId].push(kpi);
     }
     return map;
   }, [allKpis.data]);
 
-  const kpiCountMap = useMemo(() => {
+  // For a user: count active KPIs from their areas
+  const kpiCountForUser = (userId: string): number => {
+    const uAreas = userAreaMap[userId] ?? [];
+    let count = 0;
+    for (const areaId of uAreas) {
+      const areaKpis = kpisByArea[areaId] ?? [];
+      count += areaKpis.filter((k) => k.is_active).length;
+    }
+    return count;
+  };
+
+  // For a user: get visible KPIs from their areas (with area name)
+  const getKpisForUser = (userId: string): (KpiDef & { areaName: string })[] => {
+    const uAreas = userAreaMap[userId] ?? [];
+    const result: (KpiDef & { areaName: string })[] = [];
+    for (const areaId of uAreas) {
+      const area = areas.find((a) => a.id === areaId);
+      const areaKpis = kpisByArea[areaId] ?? [];
+      for (const kpi of areaKpis) {
+        result.push({ ...kpi, areaName: area?.name ?? "" });
+      }
+    }
+    return result;
+  };
+
+  // KPI count per area (active)
+  const kpiCountByArea = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const kpi of allKpis.data ?? []) {
       if (kpi.is_active) {
-        counts[kpi.user_id] = (counts[kpi.user_id] || 0) + 1;
+        const areaId = kpi.functional_area_id;
+        counts[areaId] = (counts[areaId] || 0) + 1;
       }
     }
     return counts;
@@ -1182,7 +1211,7 @@ export default function TeamPage() {
         </Button>
       </div>
 
-      {/* Aree Funzionali management strip */}
+      {/* Aree Funzionali management strip with "Gestisci KPI" buttons */}
       {isOrgAdmin && (
         <div className="flex items-center flex-wrap gap-2 p-6 border border-border rounded-lg bg-muted/30">
           <span className="text-sm font-medium text-foreground mr-2">Aree Funzionali:</span>
@@ -1222,26 +1251,42 @@ export default function TeamPage() {
                   </button>
                 </span>
               ) : (
-                <Badge
-                  variant="outline"
-                  className="inline-flex items-center text-xs gap-1.5 cursor-pointer hover:bg-muted"
-                  onClick={() => {
-                    setEditingAreaId(area.id);
-                    setEditingAreaName(area.name);
-                  }}
-                >
-                  {area.name}
-                  <button
-                    type="button"
-                    className="ml-0.5 rounded-full hover:bg-red-100 p-0.5"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteAreaMutation.mutate(area.id);
+                <span className="inline-flex items-center gap-1">
+                  <Badge
+                    variant="outline"
+                    className="inline-flex items-center text-xs gap-1.5 cursor-pointer hover:bg-muted"
+                    onClick={() => {
+                      setEditingAreaId(area.id);
+                      setEditingAreaName(area.name);
                     }}
                   >
-                    <X className="h-2.5 w-2.5 text-muted-foreground hover:text-red-600" />
-                  </button>
-                </Badge>
+                    {area.name}
+                    {kpiCountByArea[area.id] != null && (
+                      <span className="text-[10px] text-muted-foreground">
+                        ({kpiCountByArea[area.id]})
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="ml-0.5 rounded-full hover:bg-red-100 p-0.5"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteAreaMutation.mutate(area.id);
+                      }}
+                    >
+                      <X className="h-2.5 w-2.5 text-muted-foreground hover:text-red-600" />
+                    </button>
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[10px]"
+                    onClick={() => setKpiArea({ id: area.id, name: area.name })}
+                  >
+                    <BarChart3 className="h-3 w-3 mr-1" />
+                    Gestisci KPI
+                  </Button>
+                </span>
               )}
             </span>
           ))}
@@ -1377,9 +1422,9 @@ export default function TeamPage() {
                   label: u.role,
                   variant: "secondary" as const,
                 };
-                const userKpiCount = kpiCountMap[u.id] ?? 0;
+                const userKpiCount = kpiCountForUser(u.id);
                 const isExpanded = expandedUsers.has(u.id);
-                const userKpis = kpisByUser[u.id] ?? [];
+                const userKpis = getKpisForUser(u.id);
                 const visibleKpis = showHiddenKpis
                   ? userKpis
                   : userKpis.filter((k) => k.is_active);
@@ -1462,7 +1507,7 @@ export default function TeamPage() {
                           className="inline-flex items-center text-xs cursor-pointer"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setKpiUser({ id: u.id, name: u.full_name });
+                            toggleExpanded(u.id);
                           }}
                         >
                           {userKpiCount}
@@ -1501,8 +1546,8 @@ export default function TeamPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={() => setKpiUser({ id: u.id, name: u.full_name })}
-                            title="Gestisci KPI"
+                            onClick={() => toggleExpanded(u.id)}
+                            title="Vedi KPI utente"
                           >
                             <BarChart3 className="h-3.5 w-3.5" />
                           </Button>
@@ -1532,7 +1577,7 @@ export default function TeamPage() {
                       </TableCell>
                     </TableRow>
 
-                    {/* Expanded KPI section */}
+                    {/* Expanded KPI section — READ-ONLY view of user's area KPIs */}
                     {isExpanded && (
                       <TableRow key={`${u.id}-kpis`}>
                         <TableCell colSpan={9} className="p-0 bg-muted/20">
@@ -1547,11 +1592,11 @@ export default function TeamPage() {
                                   <TableHeader>
                                     <TableRow className="bg-muted/30">
                                       <TableHead className="text-xs">KPI Nome</TableHead>
+                                      <TableHead className="text-xs">Area</TableHead>
                                       <TableHead className="text-xs">Unita'</TableHead>
                                       <TableHead className="text-xs">Valore Attuale</TableHead>
                                       <TableHead className="text-xs">Obbligatorio</TableHead>
                                       <TableHead className="text-xs">Visibile</TableHead>
-                                      <TableHead className="text-xs w-16">Azioni</TableHead>
                                     </TableRow>
                                   </TableHeader>
                                   <TableBody>
@@ -1567,6 +1612,11 @@ export default function TeamPage() {
                                               <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
                                             )}
                                           </div>
+                                        </TableCell>
+                                        <TableCell>
+                                          <Badge variant="outline" className="inline-flex items-center text-xs">
+                                            {kpi.areaName}
+                                          </Badge>
                                         </TableCell>
                                         <TableCell>
                                           <Badge variant="outline" className="inline-flex items-center text-xs">
@@ -1614,32 +1664,33 @@ export default function TeamPage() {
                                             />
                                           </div>
                                         </TableCell>
-                                        <TableCell>
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-8 w-8"
-                                            onClick={() => setKpiUser({ id: u.id, name: u.full_name })}
-                                          >
-                                            <Pencil className="h-3.5 w-3.5" />
-                                          </Button>
-                                        </TableCell>
                                       </TableRow>
                                     ))}
                                   </TableBody>
                                 </Table>
                               </div>
                             )}
-                            {isAdmin && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="mt-3"
-                                onClick={() => setKpiUser({ id: u.id, name: u.full_name })}
-                              >
-                                <Plus className="h-3.5 w-3.5 mr-1" />
-                                Aggiungi KPI
-                              </Button>
+                            {/* Info: to manage KPIs, use the area-level "Gestisci KPI" button */}
+                            {isAdmin && uAreaIds.length > 0 && (
+                              <div className="flex items-center flex-wrap gap-2 mt-3">
+                                <span className="text-xs text-muted-foreground">Gestisci KPI per area:</span>
+                                {uAreaIds.map((areaId) => {
+                                  const area = areas.find((a) => a.id === areaId);
+                                  if (!area) return null;
+                                  return (
+                                    <Button
+                                      key={areaId}
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 text-xs"
+                                      onClick={() => setKpiArea({ id: area.id, name: area.name })}
+                                    >
+                                      <BarChart3 className="h-3 w-3 mr-1" />
+                                      {area.name}
+                                    </Button>
+                                  );
+                                })}
+                              </div>
                             )}
                           </div>
                         </TableCell>
@@ -1847,12 +1898,12 @@ export default function TeamPage() {
         </DialogContent>
       </Dialog>
 
-      {/* KPI Management Sheet */}
+      {/* KPI Management Sheet — now area-based */}
       <KpiManagementSheet
-        open={!!kpiUser}
-        onOpenChange={(open) => !open && setKpiUser(null)}
-        userId={kpiUser?.id ?? ""}
-        userName={kpiUser?.name ?? ""}
+        open={!!kpiArea}
+        onOpenChange={(open) => !open && setKpiArea(null)}
+        areaId={kpiArea?.id ?? ""}
+        areaName={kpiArea?.name ?? ""}
         tenantId={tenantId!}
       />
     </div>

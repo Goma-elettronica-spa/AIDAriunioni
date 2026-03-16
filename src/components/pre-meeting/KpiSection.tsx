@@ -36,6 +36,8 @@ interface KpiState {
   previousValue: number | null;
   entryId: string | null;
   variances: VarianceRow[];
+  areaName: string;
+  areaId: string;
 }
 
 export function KpiSection({
@@ -45,14 +47,30 @@ export function KpiSection({
   const [loaded, setLoaded] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
-  // Fetch KPI definitions: only is_active=true
-  const definitions = useQuery({
-    queryKey: ["kpi-defs", userId, tenantId],
+  // Fetch user's functional areas
+  const userAreas = useQuery({
+    queryKey: ["kpi-user-areas", userId, tenantId],
     queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("user_functional_areas")
+        .select("functional_area_id, functional_areas(id, name)")
+        .eq("user_id", userId)
+        .eq("tenant_id", tenantId);
+      if (error) throw error;
+      return (data ?? []) as { functional_area_id: string; functional_areas: { id: string; name: string } }[];
+    },
+  });
+
+  // Fetch KPI definitions for user's areas
+  const definitions = useQuery({
+    queryKey: ["kpi-defs", userId, tenantId, userAreas.data?.map((a) => a.functional_area_id)],
+    enabled: !!userAreas.data,
+    queryFn: async () => {
+      const areaIds = userAreas.data!.map((a) => a.functional_area_id);
+      if (!areaIds.length) return [];
       const { data, error } = await supabase
         .from("kpi_definitions")
-        .select("id, name, unit, direction, target_value, is_required")
-        .eq("user_id", userId)
+        .select("id, name, unit, direction, target_value, is_required, functional_area_id")
+        .in("functional_area_id", areaIds)
         .eq("tenant_id", tenantId)
         .eq("is_active", true)
         .order("name");
@@ -107,6 +125,12 @@ export function KpiSection({
     },
   });
 
+  // Build area name map
+  const areaNameMap = new Map<string, string>();
+  for (const ua of userAreas.data ?? []) {
+    areaNameMap.set(ua.functional_area_id, ua.functional_areas?.name ?? "");
+  }
+
   // Initialize state
   useEffect(() => {
     if (!definitions.data || loaded) return;
@@ -123,7 +147,7 @@ export function KpiSection({
     }
 
     setKpis(
-      definitions.data.map((d) => {
+      definitions.data.map((d: any) => {
         const existing = entryMap.get(d.id);
         return {
           kpiId: d.id,
@@ -136,6 +160,8 @@ export function KpiSection({
           previousValue: prevMap.get(d.id) ?? null,
           entryId: existing?.id ?? null,
           variances: existing ? (varianceMap.get(existing.id) ?? []) : [],
+          areaName: areaNameMap.get(d.functional_area_id) ?? "",
+          areaId: d.functional_area_id,
         };
       })
     );
@@ -250,7 +276,7 @@ export function KpiSection({
     onComplete(allRequiredFilled);
   }, [kpis, onComplete]);
 
-  if (definitions.isLoading) return <Skeleton className="h-40 w-full" />;
+  if (definitions.isLoading || userAreas.isLoading) return <Skeleton className="h-40 w-full" />;
 
   if (!definitions.data?.length) {
     return (
@@ -265,177 +291,194 @@ export function KpiSection({
     );
   }
 
+  // Group KPIs by area
+  const kpisByArea = new Map<string, KpiState[]>();
+  for (const kpi of kpis) {
+    const list = kpisByArea.get(kpi.areaId) ?? [];
+    list.push(kpi);
+    kpisByArea.set(kpi.areaId, list);
+  }
+
   return (
     <Card className="border border-border">
       <CardHeader>
         <CardTitle className="text-base">1. I tuoi KPI</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {kpis.map((kpi) => {
-          const currentVal = parseFloat(kpi.currentValue);
-          const delta =
-            !isNaN(currentVal) && kpi.previousValue !== null
-              ? currentVal - kpi.previousValue
-              : null;
-          const isImproved =
-            delta !== null
-              ? kpi.direction === "up_is_good"
-                ? delta >= 0
-                : delta <= 0
-              : null;
-          const showVariance = delta !== null && delta !== 0;
+        {Array.from(kpisByArea.entries()).map(([areaId, areaKpis]) => (
+          <div key={areaId} className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="inline-flex items-center text-xs font-semibold">
+                {areaKpis[0]?.areaName || "Area"}
+              </Badge>
+            </div>
+            {areaKpis.map((kpi) => {
+              const currentVal = parseFloat(kpi.currentValue);
+              const delta =
+                !isNaN(currentVal) && kpi.previousValue !== null
+                  ? currentVal - kpi.previousValue
+                  : null;
+              const isImproved =
+                delta !== null
+                  ? kpi.direction === "up_is_good"
+                    ? delta >= 0
+                    : delta <= 0
+                  : null;
+              const showVariance = delta !== null && delta !== 0;
 
-          return (
-            <div key={kpi.kpiId} className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Label className="font-medium">{kpi.name}</Label>
-                <Badge variant="outline" className="inline-flex items-center text-[10px]">{kpi.unit}</Badge>
-                {!kpi.isRequired && (
-                  <Badge variant="secondary" className="inline-flex items-center text-[10px]">
-                    (opzionale)
-                  </Badge>
-                )}
-              </div>
+              return (
+                <div key={kpi.kpiId} className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Label className="font-medium">{kpi.name}</Label>
+                    <Badge variant="outline" className="inline-flex items-center text-[10px]">{kpi.unit}</Badge>
+                    {!kpi.isRequired && (
+                      <Badge variant="secondary" className="inline-flex items-center text-[10px]">
+                        (opzionale)
+                      </Badge>
+                    )}
+                  </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Valore attuale</Label>
-                  <Input
-                    type="number"
-                    step="any"
-                    value={kpi.currentValue}
-                    onChange={(e) => updateKpi(kpi.kpiId, { currentValue: e.target.value })}
-                    disabled={readOnly}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Mese prec.</Label>
-                  <p className="mt-1 h-10 flex items-center text-sm font-mono text-muted-foreground">
-                    {kpi.previousValue !== null ? kpi.previousValue : "\u2014"}
-                  </p>
-                </div>
-                {delta !== null && (
-                  <>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div>
-                      <Label className="text-xs text-muted-foreground">Delta</Label>
-                      <p
-                        className="mt-1 h-10 flex items-center text-lg font-semibold font-mono gap-1"
-                        style={{
-                          color: isImproved
-                            ? "hsl(var(--status-done))"
-                            : "hsl(var(--status-stuck))",
-                        }}
-                      >
-                        {isImproved ? (
-                          <TrendingUp className="h-4 w-4" />
-                        ) : (
-                          <TrendingDown className="h-4 w-4" />
-                        )}
-                        {delta > 0 ? "+" : ""}
-                        {delta.toFixed(1)}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Delta %</Label>
-                      <p
-                        className="mt-1 h-10 flex items-center text-sm font-mono"
-                        style={{
-                          color: isImproved
-                            ? "hsl(var(--status-done))"
-                            : "hsl(var(--status-stuck))",
-                        }}
-                      >
-                        {kpi.previousValue && kpi.previousValue !== 0
-                          ? `${((delta / kpi.previousValue) * 100).toFixed(1)}%`
-                          : "\u2014"}
-                      </p>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Variance explanations */}
-              {showVariance && (
-                <div className="ml-4 pl-4 border-l-2 border-border space-y-2">
-                  <Label className="text-xs text-muted-foreground">Perch&eacute;?</Label>
-                  {kpi.variances.map((v, vi) => (
-                    <div key={vi} className="flex items-center gap-2">
-                      <Input
-                        placeholder="Motivo"
-                        value={v.reason}
-                        onChange={(e) => {
-                          const variances = [...kpi.variances];
-                          variances[vi] = { ...variances[vi], reason: e.target.value };
-                          updateKpi(kpi.kpiId, { variances });
-                        }}
-                        disabled={readOnly}
-                        className="flex-1 text-sm"
-                      />
+                      <Label className="text-xs text-muted-foreground">Valore attuale</Label>
                       <Input
                         type="number"
                         step="any"
-                        placeholder="Porzione"
-                        value={v.delta_portion || ""}
-                        onChange={(e) => {
-                          const variances = [...kpi.variances];
-                          variances[vi] = {
-                            ...variances[vi],
-                            delta_portion: parseFloat(e.target.value) || 0,
-                          };
-                          updateKpi(kpi.kpiId, { variances });
-                        }}
+                        value={kpi.currentValue}
+                        onChange={(e) => updateKpi(kpi.kpiId, { currentValue: e.target.value })}
                         disabled={readOnly}
-                        className="w-24 text-sm"
+                        className="mt-1"
                       />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Mese prec.</Label>
+                      <p className="mt-1 h-10 flex items-center text-sm font-mono text-muted-foreground">
+                        {kpi.previousValue !== null ? kpi.previousValue : "\u2014"}
+                      </p>
+                    </div>
+                    {delta !== null && (
+                      <>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Delta</Label>
+                          <p
+                            className="mt-1 h-10 flex items-center text-lg font-semibold font-mono gap-1"
+                            style={{
+                              color: isImproved
+                                ? "hsl(var(--status-done))"
+                                : "hsl(var(--status-stuck))",
+                            }}
+                          >
+                            {isImproved ? (
+                              <TrendingUp className="h-4 w-4" />
+                            ) : (
+                              <TrendingDown className="h-4 w-4" />
+                            )}
+                            {delta > 0 ? "+" : ""}
+                            {delta.toFixed(1)}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Delta %</Label>
+                          <p
+                            className="mt-1 h-10 flex items-center text-sm font-mono"
+                            style={{
+                              color: isImproved
+                                ? "hsl(var(--status-done))"
+                                : "hsl(var(--status-stuck))",
+                            }}
+                          >
+                            {kpi.previousValue && kpi.previousValue !== 0
+                              ? `${((delta / kpi.previousValue) * 100).toFixed(1)}%`
+                              : "\u2014"}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Variance explanations */}
+                  {showVariance && (
+                    <div className="ml-4 pl-4 border-l-2 border-border space-y-2">
+                      <Label className="text-xs text-muted-foreground">Perch&eacute;?</Label>
+                      {kpi.variances.map((v, vi) => (
+                        <div key={vi} className="flex items-center gap-2">
+                          <Input
+                            placeholder="Motivo"
+                            value={v.reason}
+                            onChange={(e) => {
+                              const variances = [...kpi.variances];
+                              variances[vi] = { ...variances[vi], reason: e.target.value };
+                              updateKpi(kpi.kpiId, { variances });
+                            }}
+                            disabled={readOnly}
+                            className="flex-1 text-sm"
+                          />
+                          <Input
+                            type="number"
+                            step="any"
+                            placeholder="Porzione"
+                            value={v.delta_portion || ""}
+                            onChange={(e) => {
+                              const variances = [...kpi.variances];
+                              variances[vi] = {
+                                ...variances[vi],
+                                delta_portion: parseFloat(e.target.value) || 0,
+                              };
+                              updateKpi(kpi.kpiId, { variances });
+                            }}
+                            disabled={readOnly}
+                            className="w-24 text-sm"
+                          />
+                          {!readOnly && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0"
+                              onClick={() => {
+                                const variances = kpi.variances.filter((_, i) => i !== vi);
+                                updateKpi(kpi.kpiId, { variances });
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                      {/* Sum warning */}
+                      {kpi.variances.length > 0 && delta !== null && (() => {
+                        const sum = kpi.variances.reduce((s, v) => s + (v.delta_portion || 0), 0);
+                        const diff = Math.abs(sum - Math.abs(delta));
+                        return diff > 0.5 ? (
+                          <p className="text-xs" style={{ color: "hsl(var(--status-waiting))" }}>
+                            La somma delle porzioni ({sum.toFixed(1)}) non corrisponde al delta ({Math.abs(delta).toFixed(1)})
+                          </p>
+                        ) : null;
+                      })()}
                       {!readOnly && (
                         <Button
                           variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 shrink-0"
-                          onClick={() => {
-                            const variances = kpi.variances.filter((_, i) => i !== vi);
-                            updateKpi(kpi.kpiId, { variances });
-                          }}
+                          size="sm"
+                          className="text-xs"
+                          onClick={() =>
+                            updateKpi(kpi.kpiId, {
+                              variances: [
+                                ...kpi.variances,
+                                { reason: "", delta_portion: 0, direction: delta! > 0 ? "positive" : "negative" },
+                              ],
+                            })
+                          }
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Plus className="h-3 w-3 mr-1" />
+                          Aggiungi motivo
                         </Button>
                       )}
                     </div>
-                  ))}
-                  {/* Sum warning */}
-                  {kpi.variances.length > 0 && delta !== null && (() => {
-                    const sum = kpi.variances.reduce((s, v) => s + (v.delta_portion || 0), 0);
-                    const diff = Math.abs(sum - Math.abs(delta));
-                    return diff > 0.5 ? (
-                      <p className="text-xs" style={{ color: "hsl(var(--status-waiting))" }}>
-                        La somma delle porzioni ({sum.toFixed(1)}) non corrisponde al delta ({Math.abs(delta).toFixed(1)})
-                      </p>
-                    ) : null;
-                  })()}
-                  {!readOnly && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() =>
-                        updateKpi(kpi.kpiId, {
-                          variances: [
-                            ...kpi.variances,
-                            { reason: "", delta_portion: 0, direction: delta! > 0 ? "positive" : "negative" },
-                          ],
-                        })
-                      }
-                    >
-                      <Plus className="h-3 w-3 mr-1" />
-                      Aggiungi motivo
-                    </Button>
                   )}
                 </div>
-              )}
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        ))}
       </CardContent>
     </Card>
   );

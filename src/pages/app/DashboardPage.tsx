@@ -262,34 +262,44 @@ export default function DashboardPage() {
         );
         return {
           ...t,
-          owner_name: ownerMap.get(t.owner_user_id) ?? "—",
+          owner_name: ownerMap.get(t.owner_user_id) ?? "\u2014",
           days_overdue: daysOverdue,
         };
       }).sort((a, b) => b.days_overdue - a.days_overdue);
     },
   });
 
-  // User's top KPIs (by largest absolute delta)
+  // User's top KPIs (by largest absolute delta) — now fetched via user's functional areas
   const myTopKpis = useQuery({
     queryKey: ["dashboard-my-top-kpis", user?.id, tenantId],
     enabled: !!user?.id && !!tenantId,
     queryFn: async () => {
-      // Fetch user's active KPI definitions
+      // 1. Fetch user's functional areas
+      const { data: ufaData, error: ufaErr } = await (supabase.from as any)("user_functional_areas")
+        .select("functional_area_id")
+        .eq("user_id", user!.id)
+        .eq("tenant_id", tenantId!);
+      if (ufaErr) throw ufaErr;
+      const areaIds = (ufaData ?? []).map((r: any) => r.functional_area_id) as string[];
+      if (!areaIds.length) return [];
+
+      // 2. Fetch KPI definitions for those areas
       const { data: defs, error: defsErr } = await supabase
         .from("kpi_definitions")
         .select("id, name, unit")
-        .eq("user_id", user!.id)
+        .in("functional_area_id", areaIds)
         .eq("is_active", true);
       if (defsErr) throw defsErr;
       if (!defs?.length) return [];
 
       const kpiIds = defs.map((d) => d.id);
 
-      // For each KPI, get the latest entry
+      // 3. For each KPI, get the latest entry for this user
       const { data: entries, error: entriesErr } = await supabase
         .from("kpi_entries")
         .select("id, kpi_id, current_value, delta, delta_percent, is_improved, meeting_id, meetings(scheduled_date)")
         .in("kpi_id", kpiIds)
+        .eq("user_id", user!.id)
         .order("meetings(scheduled_date)", { ascending: false });
       if (entriesErr) throw entriesErr;
       if (!entries?.length) return [];
@@ -350,7 +360,7 @@ export default function DashboardPage() {
       const ownerMap = new Map(owners?.map((o) => [o.id, o.full_name]) ?? []);
       return data.map((t) => ({
         ...t,
-        owner_name: ownerMap.get(t.owner_user_id) ?? "—",
+        owner_name: ownerMap.get(t.owner_user_id) ?? "\u2014",
       }));
     },
   });
@@ -627,7 +637,7 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-4 shrink-0 ml-4">
                     <span className="text-sm font-mono font-semibold text-foreground">
                       {kpi.current_value.toLocaleString("it-IT")}
-                      {kpi.unit === "%" || kpi.unit === "percent" ? "%" : kpi.unit === "EUR" || kpi.unit === "eur" ? " €" : ` ${kpi.unit}`}
+                      {kpi.unit === "%" || kpi.unit === "percent" ? "%" : kpi.unit === "EUR" || kpi.unit === "eur" ? " \u20ac" : ` ${kpi.unit}`}
                     </span>
                     {kpi.delta != null && (
                       <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${colorClass}`}>
@@ -801,7 +811,7 @@ export default function DashboardPage() {
                             day: "2-digit",
                             month: "short",
                           })
-                        : "—"}
+                        : "\u2014"}
                     </span>
                     {task.updated_at && (
                       <span className="text-xs text-muted-foreground hidden md:inline">
