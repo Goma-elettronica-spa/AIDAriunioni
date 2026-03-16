@@ -15,7 +15,7 @@ import {
 import { useDroppable } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Lightbulb, TrendingUp, Scissors, Link2, Download } from "lucide-react";
+import { Lightbulb, TrendingUp, Scissors, Link2, Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
