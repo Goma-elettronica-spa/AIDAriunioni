@@ -375,13 +375,16 @@ export default function UpgradePage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("kpi_definitions")
-        .select("id, name, area")
+        .select("id, name, functional_areas(name)")
         .eq("tenant_id", tenantId!)
         .eq("is_active", true)
-        .order("area")
         .order("name");
       if (error) throw error;
-      return data as { id: string; name: string; area: string | null }[];
+      return (data ?? []).map((k: any) => ({
+        id: k.id as string,
+        name: k.name as string,
+        area: (k.functional_areas as any)?.name ?? null,
+      })) as { id: string; name: string; area: string | null }[];
     },
   });
 
