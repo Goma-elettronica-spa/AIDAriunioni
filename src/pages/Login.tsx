@@ -275,7 +275,7 @@ export default function Login() {
     setLoading(true);
 
     // Sign up with metadata — tenant/profile creation happens in AuthCallback after email confirmation
-    const { error: signUpError } = await supabase.auth.signUp({
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email: regEmail.trim().toLowerCase(),
       password: regPassword,
       options: {
@@ -296,6 +296,12 @@ export default function Login() {
       return;
     }
 
+    // Detect repeated signup (user already exists) — identities is empty array
+    if (signUpData.user && (!signUpData.user.identities || signUpData.user.identities.length === 0)) {
+      setError("Un account con questa email esiste già. Effettua il login oppure controlla la tua casella email per il link di conferma.");
+      return;
+    }
+
     setSuccess(true);
     setSuccessMessage("Account creato! Controlla la tua email per confermare la registrazione.");
     resetRegister();
@@ -309,7 +315,7 @@ export default function Login() {
     setLoading(true);
 
     // Sign up with metadata — tenant join happens in AuthCallback after email confirmation
-    const { error: signUpError } = await supabase.auth.signUp({
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email: regEmail.trim().toLowerCase(),
       password: regPassword,
       options: {
@@ -326,6 +332,12 @@ export default function Login() {
 
     if (signUpError) {
       handleError(signUpError.message);
+      return;
+    }
+
+    // Detect repeated signup (user already exists)
+    if (signUpData.user && (!signUpData.user.identities || signUpData.user.identities.length === 0)) {
+      setError("Un account con questa email esiste già. Effettua il login oppure controlla la tua casella email per il link di conferma.");
       return;
     }
 
