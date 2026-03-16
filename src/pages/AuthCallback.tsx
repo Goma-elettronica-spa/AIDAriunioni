@@ -42,17 +42,17 @@ export default function AuthCallback() {
     // 1. Check if user profile already exists
     let { data: profile } = await supabase
       .from("users")
-      .select("id, role, tenant_id, full_name")
+      .select("id, role, tenant_id, full_name, first_login_at, invite_status" as any)
       .eq("id", userId)
-      .maybeSingle();
+      .maybeSingle() as any as { data: { id: string; role: string; tenant_id: string | null; full_name: string; first_login_at: string | null; invite_status: string | null } | null };
 
     // Try reconciliation by email if not found by id
     if (!profile && email) {
       const { data: emailProfile } = await supabase
         .from("users")
-        .select("id, role, tenant_id, full_name")
+        .select("id, role, tenant_id, full_name, first_login_at, invite_status" as any)
         .eq("email", email)
-        .maybeSingle();
+        .maybeSingle() as any as { data: { id: string; role: string; tenant_id: string | null; full_name: string; first_login_at: string | null; invite_status: string | null } | null };
 
       if (emailProfile && emailProfile.id !== userId) {
         const { error: updateError } = await supabase
@@ -68,7 +68,20 @@ export default function AuthCallback() {
       }
     }
 
-    // 2. If profile already has tenant, redirect directly
+    // 2. Track first login — update first_login_at and invite_status
+    if (profile && !profile.first_login_at) {
+      await supabase
+        .from("users")
+        .update({
+          first_login_at: new Date().toISOString(),
+          invite_status: "active",
+        } as any)
+        .eq("id", session.user.id);
+      // Update local profile reference
+      profile = { ...profile, first_login_at: new Date().toISOString(), invite_status: "active" };
+    }
+
+    // 3. If profile already has tenant, redirect directly
     if (profile && profile.tenant_id) {
       if (profile.role === "superadmin") {
         navigate("/superadmin/dashboard", { replace: true });

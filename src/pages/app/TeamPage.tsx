@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   UserPlus, Pencil, Power, Check, X, BarChart3, ChevronDown, ChevronRight,
-  Plus, EyeOff,
+  Plus, EyeOff, Mail, CheckCircle, Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +42,10 @@ type UserRow = {
   role: string;
   job_title: string | null;
   is_active: boolean;
+  invite_status: string | null;
+  invited_by: string | null;
+  invited_at: string | null;
+  first_login_at: string | null;
 };
 
 type FunctionalArea = {
@@ -98,19 +102,72 @@ const roleConfig: Record<string, { label: string; variant: "default" | "secondar
 
 // ── Helper components ────────────────────────────────────────────────────────
 
-function StatusDot({ active }: { active: boolean }) {
+function InviteStatusBadge({
+  user: u,
+  inviterName,
+}: {
+  user: UserRow;
+  inviterName?: string;
+}) {
+  let badge: JSX.Element;
+
+  if (!u.is_active) {
+    badge = (
+      <Badge variant="outline" className="inline-flex items-center gap-1 text-xs bg-red-50 text-red-700 border-red-200">
+        <X className="h-3 w-3" />
+        Disattivato
+      </Badge>
+    );
+  } else if (u.invite_status === "invited" && !u.first_login_at) {
+    badge = (
+      <Badge variant="outline" className="inline-flex items-center gap-1 text-xs bg-orange-50 text-orange-700 border-orange-200">
+        <Mail className="h-3 w-3" />
+        Invitato
+      </Badge>
+    );
+  } else if (u.invite_status === "active" && u.first_login_at) {
+    badge = (
+      <Badge variant="outline" className="inline-flex items-center gap-1 text-xs bg-green-50 text-green-700 border-green-200">
+        <CheckCircle className="h-3 w-3" />
+        Attivo
+      </Badge>
+    );
+  } else if (u.invite_status === "active" && !u.first_login_at) {
+    badge = (
+      <Badge variant="outline" className="inline-flex items-center gap-1 text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
+        <Clock className="h-3 w-3" />
+        In attesa
+      </Badge>
+    );
+  } else {
+    // fallback based on is_active
+    badge = u.is_active ? (
+      <Badge variant="outline" className="inline-flex items-center gap-1 text-xs bg-green-50 text-green-700 border-green-200">
+        <CheckCircle className="h-3 w-3" />
+        Attivo
+      </Badge>
+    ) : (
+      <Badge variant="outline" className="inline-flex items-center gap-1 text-xs bg-red-50 text-red-700 border-red-200">
+        <X className="h-3 w-3" />
+        Disattivato
+      </Badge>
+    );
+  }
+
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs">
-      <span
-        className="h-2 w-2 rounded-full shrink-0"
-        style={{
-          backgroundColor: active
-            ? "hsl(var(--status-done))"
-            : "hsl(var(--status-stuck))",
-        }}
-      />
-      {active ? "Attivo" : "Inattivo"}
-    </span>
+    <div className="flex flex-col gap-0.5">
+      {badge}
+      {u.invited_by && u.invited_at && (
+        <span className="text-[10px] text-muted-foreground">
+          Invitato{inviterName ? ` da ${inviterName}` : ""} il{" "}
+          {new Date(u.invited_at).toLocaleDateString("it-IT", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+          })}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -491,11 +548,11 @@ export default function TeamPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("users")
-        .select("id, full_name, email, role, job_title, is_active")
+        .select("id, full_name, email, role, job_title, is_active, invite_status, invited_by, invited_at, first_login_at" as any)
         .eq("tenant_id", tenantId!)
         .order("full_name", { ascending: true });
       if (error) throw error;
-      return data as UserRow[];
+      return data as unknown as UserRow[];
     },
   });
 
@@ -573,6 +630,22 @@ export default function TeamPage() {
     },
   });
 
+  const tenantInfo = useQuery({
+    queryKey: ["tenant-info", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("name")
+        .eq("id", tenantId!)
+        .single();
+      if (error) throw error;
+      return data as { name: string };
+    },
+  });
+
+  const tenantName = tenantInfo.data?.name ?? "";
+
   // ── Derived data ─────────────────────────────────────────────────────────
 
   const areas = functionalAreas.data ?? [];
@@ -586,6 +659,15 @@ export default function TeamPage() {
     }
     return map;
   }, [userFunctionalAreas.data]);
+
+  // Map: userId -> full_name (for "invited by" display)
+  const userNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const u of users.data ?? []) {
+      map[u.id] = u.full_name;
+    }
+    return map;
+  }, [users.data]);
 
   const kpisByUser = useMemo(() => {
     const map: Record<string, KpiDef[]> = {};
@@ -706,24 +788,45 @@ export default function TeamPage() {
     },
   });
 
-  // User invite
+  // User invite — create auth user (sends email) then insert into users table
   const inviteMutation = useMutation({
     mutationFn: async () => {
-      const newUserId = crypto.randomUUID();
+      const email = invEmail.trim().toLowerCase();
+
+      // 1. Create the auth user — Supabase sends a confirmation email automatically
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password: crypto.randomUUID(), // random password, user will use magic link
+        options: {
+          data: {
+            full_name: invName.trim(),
+            invited_to: tenantName,
+            invited_by_name: user?.full_name ?? "",
+          },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (signUpError) throw signUpError;
+      if (!signUpData.user) throw new Error("Impossibile creare l'utente di autenticazione");
+
+      // 2. Insert into users table with the REAL auth user id
       const { error } = await supabase.from("users").insert({
-        id: newUserId,
-        email: invEmail.trim().toLowerCase(),
+        id: signUpData.user.id,
+        email,
         full_name: invName.trim(),
         job_title: invTitle.trim() || null,
         role: invRole,
         tenant_id: tenantId!,
-      });
+        invite_status: "invited",
+        invited_by: user!.id,
+        invited_at: new Date().toISOString(),
+      } as any);
       if (error) throw error;
 
-      // Add functional areas
+      // 3. Add functional areas
       if (invAreaIds.length > 0) {
         const rows = invAreaIds.map((areaId) => ({
-          user_id: newUserId,
+          user_id: signUpData.user!.id,
           functional_area_id: areaId,
           tenant_id: tenantId!,
         }));
@@ -731,8 +834,10 @@ export default function TeamPage() {
           .insert(rows);
         if (areaError) throw areaError;
       }
+
+      return email;
     },
-    onSuccess: () => {
+    onSuccess: (email) => {
       queryClient.invalidateQueries({ queryKey: ["team-users"] });
       queryClient.invalidateQueries({ queryKey: ["user-functional-areas"] });
       writeAuditLog({
@@ -750,8 +855,30 @@ export default function TeamPage() {
       setInvRole("dirigente");
       setInvAreaIds([]);
       toast({
-        title: "Utente creato",
-        description: "L'utente ricevera' il magic link al primo accesso",
+        title: "Invito inviato",
+        description: `Invito inviato a ${email}. L'utente ricevera' un'email per accedere.`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
+  // Resend invite
+  const resendInviteMutation = useMutation({
+    mutationFn: async (email: string) => {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email,
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      });
+      if (error) throw error;
+      return email;
+    },
+    onSuccess: (email) => {
+      toast({
+        title: "Invito reinviato",
+        description: `Un nuovo invito e' stato inviato a ${email}.`,
       });
     },
     onError: (err: Error) => {
@@ -1342,10 +1469,25 @@ export default function TeamPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <StatusDot active={u.is_active} />
+                        <InviteStatusBadge
+                          user={u}
+                          inviterName={u.invited_by ? userNameMap[u.invited_by] : undefined}
+                        />
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          {u.invite_status === "invited" && !u.first_login_at && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => resendInviteMutation.mutate(u.email)}
+                              disabled={resendInviteMutation.isPending}
+                              title="Reinvia invito"
+                            >
+                              <Mail className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
@@ -1616,6 +1758,9 @@ export default function TeamPage() {
                 </div>
               </div>
             )}
+            <p className="text-xs text-muted-foreground">
+              L'utente ricevera' un'email con un link per accedere{tenantName ? ` a ${tenantName}` : ""}. Al primo accesso, il suo account sara' attivato automaticamente.
+            </p>
             <DialogFooter>
               <Button
                 type="button"
@@ -1632,7 +1777,7 @@ export default function TeamPage() {
                   !invName.trim()
                 }
               >
-                {inviteMutation.isPending ? "Creazione..." : "Invita"}
+                {inviteMutation.isPending ? "Invio in corso..." : "Invia Invito"}
               </Button>
             </DialogFooter>
           </form>
