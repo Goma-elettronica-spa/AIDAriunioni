@@ -5,7 +5,6 @@ import { useTenantName } from "@/hooks/use-tenant-name";
 import { useNavigate } from "react-router-dom";
 import {
   CalendarDays,
-  ClipboardCheck,
   ListTodo,
   TrendingDown,
   ArrowRight,
@@ -191,22 +190,39 @@ export default function DashboardPage() {
         .from("board_tasks")
         .select("id", { count: "exact", head: true })
         .eq("tenant_id", tenantId!)
-        .in("status", ["todo", "wip", "stuck", "waiting_for"]);
+        .in("status", ["todo", "wip", "waiting_for"]);
       if (error) throw error;
       return count ?? 0;
     },
   });
 
-  // KPI in decline
+  // Latest meeting (most recent by scheduled_date, regardless of status)
+  const latestMeeting = useQuery({
+    queryKey: ["dashboard-latest-meeting", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("meetings")
+        .select("id")
+        .eq("tenant_id", tenantId!)
+        .order("scheduled_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // KPI in decline — from the LATEST meeting
   const kpiDecline = useQuery({
-    queryKey: ["dashboard-kpi-decline", tenantId, nextMeeting.data?.id],
-    enabled: !!tenantId && !!nextMeeting.data?.id,
+    queryKey: ["dashboard-kpi-decline", tenantId, latestMeeting.data?.id],
+    enabled: !!tenantId && !!latestMeeting.data?.id,
     queryFn: async () => {
       const { count, error } = await supabase
         .from("kpi_entries")
         .select("id", { count: "exact", head: true })
         .eq("tenant_id", tenantId!)
-        .eq("meeting_id", nextMeeting.data!.id)
+        .eq("meeting_id", latestMeeting.data!.id)
         .eq("is_improved", false);
       if (error) throw error;
       return count ?? 0;
@@ -316,9 +332,9 @@ export default function DashboardPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("board_tasks")
-        .select("id, title, status, deadline_date, owner_user_id")
+        .select("id, title, status, deadline_date, owner_user_id, updated_at")
         .eq("tenant_id", tenantId!)
-        .order("created_at", { ascending: false })
+        .order("updated_at", { ascending: false })
         .limit(5);
       if (error) throw error;
 
@@ -481,8 +497,8 @@ export default function DashboardPage() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* Prossima Riunione */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Giorni alla prossima riunione */}
         <Card className="border border-border">
           <CardContent className="p-6">
             <div className="flex items-center gap-2 mb-3">
@@ -493,49 +509,15 @@ export default function DashboardPage() {
             {nextMeeting.isLoading ? (
               <Skeleton className="h-8 w-24 mb-1" />
             ) : meeting ? (
-              <>
-                <p className="text-lg font-semibold font-mono text-foreground">
-                  {new Date(meeting.scheduled_date).toLocaleDateString("it-IT", {
-                    day: "2-digit",
-                    month: "short",
-                  })}
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {daysUntil(meeting.scheduled_date) > 0
-                    ? `tra ${daysUntil(meeting.scheduled_date)} giorni`
-                    : daysUntil(meeting.scheduled_date) === 0
-                      ? "Oggi"
-                      : "Passata"}
-                </p>
-              </>
+              <p className="text-3xl font-semibold font-mono text-foreground">
+                {daysUntil(meeting.scheduled_date) >= 0
+                  ? daysUntil(meeting.scheduled_date)
+                  : 0}
+              </p>
             ) : (
-              <p className="text-sm text-muted-foreground">Nessuna programmata</p>
+              <p className="text-3xl font-semibold font-mono text-muted-foreground">&mdash;</p>
             )}
-            <p className="text-sm text-muted-foreground mt-1">Prossima Riunione</p>
-          </CardContent>
-        </Card>
-
-        {/* Pre-Meeting */}
-        <Card className="border border-border">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="p-2 rounded-md bg-muted">
-                <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
-              </div>
-            </div>
-            {preMeetingProgress.isLoading || nextMeeting.isLoading ? (
-              <Skeleton className="h-8 w-16 mb-1" />
-            ) : progress ? (
-              <>
-                <p className="text-3xl font-semibold font-mono text-foreground">
-                  {progress.completed}/{progress.total}
-                </p>
-                <Progress value={progressPercent} className="h-1 mt-2" />
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">—</p>
-            )}
-            <p className="text-sm text-muted-foreground mt-1">Pre-Meeting Completati</p>
+            <p className="text-sm text-muted-foreground mt-1">Giorni alla prossima riunione</p>
           </CardContent>
         </Card>
 
@@ -566,7 +548,7 @@ export default function DashboardPage() {
                 <TrendingDown className="h-4 w-4 text-muted-foreground" />
               </div>
             </div>
-            {kpiDecline.isLoading || nextMeeting.isLoading ? (
+            {kpiDecline.isLoading || latestMeeting.isLoading ? (
               <Skeleton className="h-8 w-12 mb-1" />
             ) : (
               <p
@@ -809,18 +791,28 @@ export default function DashboardPage() {
                     <p className="text-xs text-muted-foreground">{task.owner_name}</p>
                   </div>
                   <div className="flex items-center gap-4 shrink-0 ml-4">
-                    <div className="flex items-center gap-1.5">
+                    <Badge variant="secondary" className="inline-flex items-center text-xs font-normal gap-1.5">
                       <StatusDot className={status.dotClass} />
-                      <span className="text-xs text-muted-foreground">
-                        {status.label}
-                      </span>
-                    </div>
+                      {status.label}
+                    </Badge>
                     <span className="text-xs text-muted-foreground font-mono hidden sm:inline">
-                      {new Date(task.deadline_date).toLocaleDateString("it-IT", {
-                        day: "2-digit",
-                        month: "short",
-                      })}
+                      {task.deadline_date
+                        ? new Date(task.deadline_date).toLocaleDateString("it-IT", {
+                            day: "2-digit",
+                            month: "short",
+                          })
+                        : "—"}
                     </span>
+                    {task.updated_at && (
+                      <span className="text-xs text-muted-foreground hidden md:inline">
+                        {new Date(task.updated_at).toLocaleDateString("it-IT", {
+                          day: "2-digit",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    )}
                   </div>
                 </div>
               );

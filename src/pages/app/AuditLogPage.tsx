@@ -35,8 +35,15 @@ const entityLabels: Record<string, string> = {
   slide_upload: "Slide",
   meeting: "Riunione",
   user: "Utente",
-  kpi_definition: "Definizione KPI",
+  kpi_definition: "KPI",
   meeting_brief: "Brief",
+  suggested_task: "Task Suggerito",
+  meeting_summary: "Riassunto",
+  summary_shared: "Condivisione Riassunto",
+  join_request: "Richiesta Accesso",
+  functional_area: "Area Funzionale",
+  board_role: "Ruolo Board",
+  pre_meeting_submission: "Pre-Meeting Inviato",
 };
 
 const entityFilterOptions = [
@@ -45,7 +52,83 @@ const entityFilterOptions = [
   { value: "highlight", label: "Highlight" },
   { value: "commitment", label: "Impegno" },
   { value: "board_task", label: "Task" },
+  { value: "user", label: "Utente" },
+  { value: "kpi_definition", label: "KPI" },
+  { value: "meeting", label: "Riunione" },
+  { value: "suggested_task", label: "Task Suggerito" },
+  { value: "meeting_summary", label: "Riassunto" },
+  { value: "summary_shared", label: "Condivisione Riassunto" },
+  { value: "join_request", label: "Richiesta Accesso" },
+  { value: "functional_area", label: "Area Funzionale" },
+  { value: "board_role", label: "Ruolo Board" },
 ];
+
+const fieldLabels: Record<string, string> = {
+  full_name: "Nome completo",
+  email: "Email",
+  role: "Ruolo",
+  is_active: "Attivo",
+  is_required: "Obbligatorio",
+  name: "Nome",
+  unit: "Unita'",
+  direction: "Direzione",
+  target_value: "Valore target",
+  status: "Stato",
+  title: "Titolo",
+  description: "Descrizione",
+  scheduled_date: "Data programmata",
+  summary_text: "Testo riassunto",
+  shared_with_count: "Condiviso con",
+  suggested_role: "Ruolo suggerito",
+  assigned_to: "Assegnato a",
+  board_role_id: "Ruolo board",
+  owner_user_id: "Owner",
+  deadline_type: "Tipo scadenza",
+  functional_area_id: "Area funzionale",
+  current_value: "Valore attuale",
+};
+
+function formatFieldValue(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "boolean") return value ? "Si'" : "No";
+  return String(value);
+}
+
+function DiffView({ oldValues, newValues }: { oldValues: Record<string, any> | null; newValues: Record<string, any> | null }) {
+  const allKeys = new Set([
+    ...Object.keys(oldValues ?? {}),
+    ...Object.keys(newValues ?? {}),
+  ]);
+
+  return (
+    <div className="space-y-1.5">
+      {[...allKeys].map((key) => {
+        const oldVal = oldValues?.[key];
+        const newVal = newValues?.[key];
+        const label = fieldLabels[key] ?? key;
+        const changed = JSON.stringify(oldVal) !== JSON.stringify(newVal);
+        return (
+          <div key={key} className="flex items-center gap-2 text-xs">
+            <span className="font-medium text-muted-foreground w-32 shrink-0">{label}</span>
+            {oldVal !== undefined && (
+              <span className={cn("px-1.5 py-0.5 rounded", changed ? "bg-destructive/10 line-through" : "bg-muted/30")}>
+                {formatFieldValue(oldVal)}
+              </span>
+            )}
+            {changed && oldVal !== undefined && newVal !== undefined && (
+              <span className="text-muted-foreground">&rarr;</span>
+            )}
+            {newVal !== undefined && (
+              <span className={cn("px-1.5 py-0.5 rounded", changed ? "bg-[hsl(var(--status-done)/0.1)] font-medium" : "bg-muted/30")}>
+                {formatFieldValue(newVal)}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function AuditLogPage() {
   const { user } = useAuth();
@@ -261,24 +344,10 @@ export default function AuditLogPage() {
                         <TableRow key={`${log.id}-detail`} className="bg-muted/10">
                           <TableCell />
                           <TableCell colSpan={5} className="py-3">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                              {log.old_values && (
-                                <div>
-                                  <p className="font-medium text-muted-foreground mb-1">Valori precedenti</p>
-                                  <pre className="p-2 rounded bg-destructive/10 text-foreground overflow-auto max-h-48 whitespace-pre-wrap font-mono text-[11px]">
-                                    {JSON.stringify(log.old_values, null, 2)}
-                                  </pre>
-                                </div>
-                              )}
-                              {log.new_values && (
-                                <div>
-                                  <p className="font-medium text-muted-foreground mb-1">Nuovi valori</p>
-                                  <pre className="p-2 rounded bg-[hsl(var(--status-done)/0.1)] text-foreground overflow-auto max-h-48 whitespace-pre-wrap font-mono text-[11px]">
-                                    {JSON.stringify(log.new_values, null, 2)}
-                                  </pre>
-                                </div>
-                              )}
-                            </div>
+                            <DiffView
+                              oldValues={log.old_values as Record<string, any> | null}
+                              newValues={log.new_values as Record<string, any> | null}
+                            />
                           </TableCell>
                         </TableRow>
                       )}

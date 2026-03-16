@@ -22,6 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
+import { writeAuditLog } from "@/lib/audit";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   ArrowUp,
   ArrowDown,
@@ -85,6 +87,7 @@ export default function KpiManagementSheet({
   userName,
   tenantId,
 }: KpiManagementSheetProps) {
+  const { user: authUser } = useAuth();
   const queryClient = useQueryClient();
 
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -123,10 +126,18 @@ export default function KpiManagementSheet({
       });
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, form) => {
       queryClient.invalidateQueries({ queryKey: ["kpi-definitions", userId, tenantId] });
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
+      writeAuditLog({
+        tenantId,
+        userId: authUser!.id,
+        action: "create",
+        entityType: "kpi_definition",
+        entityId: crypto.randomUUID(),
+        newValues: { name: form.name, unit: form.unit, direction: form.direction, target_value: form.target_value || null },
+      });
       setShowCreateForm(false);
       setCreateForm(emptyForm);
       toast({ title: "KPI creato" });
@@ -151,10 +162,20 @@ export default function KpiManagementSheet({
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["kpi-definitions", userId, tenantId] });
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
+      const oldKpi = activeKpis.find((k) => k.id === variables.id);
+      writeAuditLog({
+        tenantId,
+        userId: authUser!.id,
+        action: "update",
+        entityType: "kpi_definition",
+        entityId: variables.id,
+        oldValues: oldKpi ? { name: oldKpi.name, unit: oldKpi.unit, direction: oldKpi.direction, target_value: oldKpi.target_value } : null,
+        newValues: { name: variables.form.name, unit: variables.form.unit, direction: variables.form.direction, target_value: variables.form.target_value || null },
+      });
       setEditingId(null);
       toast({ title: "KPI aggiornato" });
     },
@@ -172,10 +193,19 @@ export default function KpiManagementSheet({
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ["kpi-definitions", userId, tenantId] });
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
+      writeAuditLog({
+        tenantId,
+        userId: authUser!.id,
+        action: "update",
+        entityType: "kpi_definition",
+        entityId: id,
+        oldValues: { is_active: true },
+        newValues: { is_active: false },
+      });
       setConfirmDeactivateId(null);
       toast({
         title: "KPI disattivato",
@@ -199,6 +229,15 @@ export default function KpiManagementSheet({
       queryClient.invalidateQueries({ queryKey: ["kpi-definitions", userId, tenantId] });
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       const kpi = activeKpis.find((k) => k.id === variables.id);
+      writeAuditLog({
+        tenantId,
+        userId: authUser!.id,
+        action: "update",
+        entityType: "kpi_definition",
+        entityId: variables.id,
+        oldValues: { is_required: variables.is_required },
+        newValues: { is_required: !variables.is_required },
+      });
       toast({
         title: `KPI ${kpi?.name ?? ""} ora e' ${!variables.is_required ? "obbligatorio" : "opzionale"}`,
       });

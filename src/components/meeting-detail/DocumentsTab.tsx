@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Download, FileText, Sparkles, Loader2, Pencil, Save, Share2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { writeAuditLog } from "@/lib/audit";
 import type { Tables } from "@/integrations/supabase/types";
 
 interface Props {
@@ -67,6 +68,15 @@ export function DocumentsTab({ meeting, isAdmin }: Props) {
         .eq("id", meeting.id);
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["meeting-detail", meeting.id] });
+      writeAuditLog({
+        tenantId: meeting.tenant_id,
+        userId: user!.id,
+        action: "update",
+        entityType: "meeting_summary",
+        entityId: meeting.id,
+        oldValues: { summary_text: summaryText ?? null },
+        newValues: { summary_text: text },
+      });
       toast({ title: "Riassunto salvato" });
       setEditMode(false);
     } catch (err: any) {
@@ -95,6 +105,14 @@ export function DocumentsTab({ meeting, isAdmin }: Props) {
       if (error) throw error;
 
       queryClient.invalidateQueries({ queryKey: ["meeting-detail", meeting.id] });
+      writeAuditLog({
+        tenantId: meeting.tenant_id,
+        userId: user!.id,
+        action: "create",
+        entityType: "meeting_summary",
+        entityId: meeting.id,
+        newValues: { summary_text: "generated" },
+      });
       toast({ title: "Riassunto generato" });
     } catch (err: any) {
       toast({ title: "Errore generazione", description: err.message, variant: "destructive" });
@@ -134,6 +152,14 @@ export function DocumentsTab({ meeting, isAdmin }: Props) {
       const { error: insertError } = await (supabase.from as any)("notifications").insert(notifications);
       if (insertError) throw insertError;
 
+      writeAuditLog({
+        tenantId: meeting.tenant_id,
+        userId: user!.id,
+        action: "create",
+        entityType: "summary_shared",
+        entityId: meeting.id,
+        newValues: { shared_with_count: recipients.length },
+      });
       toast({ title: `Riassunto condiviso con ${recipients.length} persone` });
     } catch (err: any) {
       toast({ title: "Errore condivisione", description: err.message, variant: "destructive" });

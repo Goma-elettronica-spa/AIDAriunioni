@@ -26,6 +26,7 @@ import {
   EyeOff,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { writeAuditLog } from "@/lib/audit";
 
 interface Props {
   meetingId: string;
@@ -200,6 +201,16 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl }: Props)
       if (error) throw error;
 
       queryClient.invalidateQueries({ queryKey: ["suggested-tasks", meetingId] });
+      for (const t of placeholderTasks) {
+        writeAuditLog({
+          tenantId,
+          userId: user!.id,
+          action: "create",
+          entityType: "suggested_task",
+          entityId: meetingId,
+          newValues: { title: t.title, suggested_role: t.suggested_role },
+        });
+      }
       toast({ title: "Task suggeriti generati" });
     } catch (err: any) {
       toast({ title: "Errore generazione", description: err.message, variant: "destructive" });
@@ -253,6 +264,15 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl }: Props)
 
       queryClient.invalidateQueries({ queryKey: ["suggested-tasks", meetingId] });
       queryClient.invalidateQueries({ queryKey: ["detail-tasks", meetingId] });
+      writeAuditLog({
+        tenantId,
+        userId: user!.id,
+        action: "update",
+        entityType: "suggested_task",
+        entityId: st.id,
+        oldValues: { status: "suggested" },
+        newValues: { status: "accepted", assigned_to: edit.assigned_user_id },
+      });
       toast({ title: "Task confermato e creato" });
     } catch (err: any) {
       toast({ title: "Errore conferma task", description: err.message, variant: "destructive" });
@@ -267,6 +287,15 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl }: Props)
         .eq("id", taskId);
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["suggested-tasks", meetingId] });
+      writeAuditLog({
+        tenantId,
+        userId: user!.id,
+        action: "update",
+        entityType: "suggested_task",
+        entityId: taskId,
+        oldValues: { status: "suggested" },
+        newValues: { status: "rejected" },
+      });
       toast({ title: "Task rifiutato" });
     } catch (err: any) {
       toast({ title: "Errore", description: err.message, variant: "destructive" });

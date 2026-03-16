@@ -25,13 +25,13 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { toast } from "@/hooks/use-toast";
+import { writeAuditLog } from "@/lib/audit";
 
 const statusConfig: Record<string, { label: string; dotClass: string; order: number }> = {
   draft: { label: "Bozza", dotClass: "bg-[hsl(var(--status-todo))]", order: 0 },
   pre_meeting: { label: "Pre-Meeting", dotClass: "bg-[hsl(var(--status-waiting))]", order: 1 },
   in_progress: { label: "In Corso", dotClass: "bg-[hsl(var(--status-wip))]", order: 2 },
-  completed: { label: "Completata", dotClass: "bg-[hsl(var(--status-done))]", order: 3 },
-  stuck: { label: "Bloccata", dotClass: "bg-red-500", order: 4 },
+  completed: { label: "Terminata", dotClass: "bg-[hsl(var(--status-done))]", order: 3 },
 };
 
 const statusFlow = ["draft", "pre_meeting", "in_progress", "completed"];
@@ -45,15 +45,27 @@ function StatusDot({ className }: { className: string }) {
   return <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${className}`} />;
 }
 
-function getDisplayStatus(meeting: { status: string; scheduled_date: string }): string {
+function getDisplayStatus(meeting: { status: string; scheduled_date: string; pre_meeting_deadline?: string | null }): string {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const scheduled = new Date(meeting.scheduled_date);
   scheduled.setHours(0, 0, 0, 0);
 
-  if (scheduled < today && meeting.status !== "completed") {
-    return "stuck";
+  // Past meeting is always "completed" (Terminata)
+  if (scheduled < today) {
+    return "completed";
   }
+
+  // Between pre_meeting_deadline and scheduled_date → in_progress
+  if (meeting.pre_meeting_deadline) {
+    const deadline = new Date(meeting.pre_meeting_deadline);
+    deadline.setHours(0, 0, 0, 0);
+    if (today >= deadline && today <= scheduled) {
+      return "in_progress";
+    }
+  }
+
+  // Before pre_meeting_deadline → use stored status
   return meeting.status;
 }
 
@@ -132,15 +144,7 @@ export default function MeetingsPage() {
     if (!meetings.data) return [];
     return meetings.data.filter((m) => {
       const displayStatus = getDisplayStatus(m);
-      if (statusFilter !== "all") {
-        if (statusFilter === "stuck") {
-          if (displayStatus !== "stuck") return false;
-        } else {
-          if (m.status !== statusFilter) return false;
-          // If filtering for a specific non-stuck status, exclude meetings that display as stuck
-          if (displayStatus === "stuck") return false;
-        }
-      }
+      if (statusFilter !== "all" && displayStatus !== statusFilter) return false;
       if (quarterFilter !== "all" && m.quarter !== quarterFilter) return false;
       return true;
     });
@@ -173,6 +177,14 @@ export default function MeetingsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["meetings-list"] });
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "create",
+        entityType: "meeting",
+        entityId: crypto.randomUUID(),
+        newValues: { title: title.trim(), scheduled_date: scheduledDate ? format(scheduledDate, "yyyy-MM-dd") : null },
+      });
       setCreateOpen(false);
       toast({ title: "Riunione creata" });
     },
@@ -190,8 +202,18 @@ export default function MeetingsPage() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["meetings-list"] });
+      const meeting = meetings.data?.find((m) => m.id === variables.id);
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "update",
+        entityType: "meeting",
+        entityId: variables.id,
+        oldValues: { status: meeting?.status ?? null },
+        newValues: { status: variables.newStatus },
+      });
       toast({ title: "Stato aggiornato" });
     },
     onError: (err: Error) => {
@@ -231,8 +253,7 @@ export default function MeetingsPage() {
             <SelectItem value="draft">Bozza</SelectItem>
             <SelectItem value="pre_meeting">Pre-Meeting</SelectItem>
             <SelectItem value="in_progress">In Corso</SelectItem>
-            <SelectItem value="completed">Completata</SelectItem>
-            <SelectItem value="stuck">Bloccata</SelectItem>
+            <SelectItem value="completed">Terminata</SelectItem>
           </SelectContent>
         </Select>
 
@@ -277,6 +298,7 @@ export default function MeetingsPage() {
         <div className="space-y-3">
           {filtered.map((m) => {
             const displayStatus = getDisplayStatus(m);
+            const isPast = displayStatus === "completed" && m.status !== "completed";
             const sc = statusConfig[displayStatus] ?? statusConfig.draft;
             const progress = preMeetingProgress.data?.[m.id];
             const progressPercent =
@@ -303,10 +325,7 @@ export default function MeetingsPage() {
                         </h3>
                         <Badge
                           variant="secondary"
-                          className={cn(
-                            "inline-flex items-center text-xs font-normal gap-1.5",
-                            displayStatus === "stuck" && "bg-red-50 text-red-700"
-                          )}
+                          className="inline-flex items-center text-xs font-normal gap-1.5"
                         >
                           <StatusDot className={sc.dotClass} />
                           {sc.label}
@@ -323,7 +342,8 @@ export default function MeetingsPage() {
                           })}
                         </span>
                         {(m.status === "draft" || m.status === "pre_meeting") &&
-                          m.pre_meeting_deadline && (
+                          m.pre_meeting_deadline &&
+                          !isPast && (
                             <span>
                               Deadline:{" "}
                               {format(
@@ -336,7 +356,7 @@ export default function MeetingsPage() {
                       </div>
 
                       {/* Progress */}
-                      {progress && progress.total > 0 && m.status !== "completed" && (
+                      {progress && progress.total > 0 && displayStatus !== "completed" && (
                         <div className="flex items-center gap-3 max-w-xs pt-1">
                           <Progress value={progressPercent} className="h-1.5 flex-1" />
                           <span className="text-xs text-muted-foreground font-mono flex items-center gap-1">
@@ -347,28 +367,30 @@ export default function MeetingsPage() {
                       )}
                     </div>
 
-                    {/* Actions */}
-                    <div
-                      className="flex items-center gap-2 shrink-0"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {isAdmin && nextStatus && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            statusMutation.mutate({
-                              id: m.id,
-                              newStatus: nextStatus,
-                            })
-                          }
-                          disabled={statusMutation.isPending}
-                        >
-                          {statusConfig[nextStatus]?.label ?? nextStatus}
-                          <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                        </Button>
-                      )}
-                    </div>
+                    {/* Actions — hide for past meetings */}
+                    {displayStatus !== "completed" && (
+                      <div
+                        className="flex items-center gap-2 shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {isAdmin && nextStatus && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              statusMutation.mutate({
+                                id: m.id,
+                                newStatus: nextStatus,
+                              })
+                            }
+                            disabled={statusMutation.isPending}
+                          >
+                            {statusConfig[nextStatus]?.label ?? nextStatus}
+                            <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

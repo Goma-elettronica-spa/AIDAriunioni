@@ -24,6 +24,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
+import { writeAuditLog } from "@/lib/audit";
 import KpiManagementSheet from "@/components/team/KpiManagementSheet";
 
 type UserRow = {
@@ -134,8 +135,18 @@ function InlineKpiValue({
         if (error) throw error;
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, newValue) => {
       queryClient.invalidateQueries({ queryKey: ["kpi-latest-entries"] });
+      writeAuditLog({
+        tenantId,
+        userId,
+        action: entry?.id ? "update" : "create",
+        entityType: "kpi_entry",
+        entityId: entry?.id ?? kpiId,
+        oldValues: entry?.current_value != null ? { current_value: entry.current_value } : null,
+        newValues: { current_value: newValue },
+        modifiedForUserId: userId,
+      });
       setEditing(false);
       toast({ title: "Valore KPI aggiornato" });
     },
@@ -344,6 +355,14 @@ export default function TeamPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-users"] });
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "create",
+        entityType: "user",
+        entityId: crypto.randomUUID(),
+        newValues: { email: invEmail.trim().toLowerCase(), full_name: invName.trim(), role: invRole },
+      });
       setInviteOpen(false);
       setInvEmail("");
       setInvName("");
@@ -374,6 +393,17 @@ export default function TeamPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-users"] });
+      if (editUser) {
+        writeAuditLog({
+          tenantId: tenantId!,
+          userId: user!.id,
+          action: "update",
+          entityType: "user",
+          entityId: editUser.id,
+          oldValues: { full_name: editUser.full_name, role: editUser.role },
+          newValues: { full_name: editName.trim(), role: editRole },
+        });
+      }
       setEditOpen(false);
       toast({ title: "Utente aggiornato" });
     },
@@ -390,8 +420,17 @@ export default function TeamPage() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["team-users"] });
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "update",
+        entityType: "user",
+        entityId: variables.id,
+        oldValues: { is_active: variables.is_active },
+        newValues: { is_active: !variables.is_active },
+      });
     },
     onError: (err: Error) => {
       toast({ title: "Errore", description: err.message, variant: "destructive" });
@@ -411,6 +450,15 @@ export default function TeamPage() {
     onSuccess: (_newVal, variables) => {
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       const kpi = allKpis.data?.find((k) => k.id === variables.id);
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "update",
+        entityType: "kpi_definition",
+        entityId: variables.id,
+        oldValues: { is_required: variables.is_required },
+        newValues: { is_required: !variables.is_required },
+      });
       toast({
         title: `KPI ${kpi?.name ?? ""} ora e' ${!variables.is_required ? "obbligatorio" : "opzionale"}`,
       });
@@ -429,9 +477,18 @@ export default function TeamPage() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-counts"] });
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "update",
+        entityType: "kpi_definition",
+        entityId: variables.id,
+        oldValues: { is_active: variables.is_active },
+        newValues: { is_active: !variables.is_active },
+      });
       setConfirmHideKpi(null);
       toast({ title: "Visibilita' KPI aggiornata" });
     },
@@ -458,9 +515,17 @@ export default function TeamPage() {
       });
       if (userError) throw userError;
     },
-    onSuccess: () => {
+    onSuccess: (_data, request) => {
       queryClient.invalidateQueries({ queryKey: ["join-requests"] });
       queryClient.invalidateQueries({ queryKey: ["team-users"] });
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "update",
+        entityType: "join_request",
+        entityId: request.id,
+        newValues: { status: "approved" },
+      });
       toast({ title: "Richiesta approvata", description: "L'utente e' stato aggiunto al team." });
     },
     onError: (err: Error) => {
@@ -477,8 +542,16 @@ export default function TeamPage() {
         .eq("id", requestId);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, requestId) => {
       queryClient.invalidateQueries({ queryKey: ["join-requests"] });
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "update",
+        entityType: "join_request",
+        entityId: requestId,
+        newValues: { status: "rejected" },
+      });
       toast({ title: "Richiesta rifiutata" });
     },
     onError: (err: Error) => {

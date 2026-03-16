@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { writeAuditLog } from "@/lib/audit";
 import {
   Plus,
   Pencil,
@@ -408,6 +409,15 @@ export default function BoardRolesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["board-roles-areas"] });
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: editingArea ? "update" : "create",
+        entityType: "functional_area",
+        entityId: editingArea?.id ?? crypto.randomUUID(),
+        oldValues: editingArea ? { name: editingArea.name, description: editingArea.description } : null,
+        newValues: { name: areaName, description: areaDescription || null },
+      });
       setAreaDialogOpen(false);
       toast({ title: editingArea ? "Area aggiornata" : "Area creata" });
     },
@@ -423,8 +433,15 @@ export default function BoardRolesPage() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ["board-roles-areas"] });
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "delete",
+        entityType: "functional_area",
+        entityId: id,
+      });
       toast({ title: "Area eliminata" });
     },
     onError: (err: any) => {
@@ -457,6 +474,15 @@ export default function BoardRolesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["board-roles-roles"] });
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: editingRole ? "update" : "create",
+        entityType: "board_role",
+        entityId: editingRole?.id ?? crypto.randomUUID(),
+        oldValues: editingRole ? { name: editingRole.name, description: editingRole.description, functional_area_id: editingRole.functional_area_id } : null,
+        newValues: { name: roleName, description: roleDescription || null, functional_area_id: roleAreaId && roleAreaId !== "__none__" ? roleAreaId : null },
+      });
       setRoleDialogOpen(false);
       toast({ title: editingRole ? "Ruolo aggiornato" : "Ruolo creato" });
     },
@@ -472,8 +498,15 @@ export default function BoardRolesPage() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ["board-roles-roles"] });
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "delete",
+        entityType: "board_role",
+        entityId: id,
+      });
       setDeleteConfirmOpen(false);
       setRoleToDelete(null);
       toast({ title: "Ruolo eliminato" });
@@ -490,8 +523,18 @@ export default function BoardRolesPage() {
         .eq("id", userId);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["board-roles-users"] });
+      const targetUser = users.find((u) => u.id === variables.userId);
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "update",
+        entityType: "user",
+        entityId: variables.userId,
+        oldValues: { board_role_id: targetUser?.board_role_id ?? null },
+        newValues: { board_role_id: variables.roleId },
+      });
       toast({ title: "Ruolo assegnato" });
     },
     onError: (err: any) => {
@@ -506,8 +549,18 @@ export default function BoardRolesPage() {
         .eq("id", userId);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, userId) => {
       queryClient.invalidateQueries({ queryKey: ["board-roles-users"] });
+      const targetUser = users.find((u) => u.id === userId);
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "update",
+        entityType: "user",
+        entityId: userId,
+        oldValues: { board_role_id: targetUser?.board_role_id ?? null },
+        newValues: { board_role_id: null },
+      });
       toast({ title: "Assegnazione rimossa" });
     },
     onError: (err: any) => {

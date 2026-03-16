@@ -28,6 +28,7 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import { toast } from "@/hooks/use-toast";
+import { writeAuditLog } from "@/lib/audit";
 import { KanbanColumn } from "@/components/board/KanbanColumn";
 import { TaskCard } from "@/components/board/TaskCard";
 import { CreateTaskDialog } from "@/components/board/CreateTaskDialog";
@@ -249,16 +250,25 @@ export default function BoardPage() {
 
   // Status mutation
   const statusMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+    mutationFn: async ({ id, status, oldStatus }: { id: string; status: string; oldStatus: string }) => {
       const { error } = await supabase
         .from("board_tasks")
         .update({ status })
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["board-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["board-subtasks"] });
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "update",
+        entityType: "board_task",
+        entityId: variables.id,
+        oldValues: { status: variables.oldStatus },
+        newValues: { status: variables.status },
+      });
     },
     onError: (err: Error) => {
       toast({ title: "Errore", description: err.message, variant: "destructive" });
@@ -293,6 +303,17 @@ export default function BoardPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["board-tasks"] });
+      if (selectedTask) {
+        writeAuditLog({
+          tenantId: tenantId!,
+          userId: user!.id,
+          action: "update",
+          entityType: "board_task",
+          entityId: selectedTask.id,
+          oldValues: { title: selectedTask.title, description: selectedTask.description, owner_user_id: selectedTask.owner_user_id, deadline_type: selectedTask.deadline_type },
+          newValues: { title: editTitle.trim(), description: editDescription.trim() || null, owner_user_id: editOwnerId, deadline_type: editDeadlineType },
+        });
+      }
       setSelectedTask(null);
       toast({ title: "Task aggiornato" });
     },
@@ -419,7 +440,7 @@ export default function BoardPage() {
       const targetCol = columns.find((c) => c.id === over.id)?.id;
       if (!targetCol || targetCol === task.status) return;
 
-      statusMutation.mutate({ id: taskId, status: targetCol });
+      statusMutation.mutate({ id: taskId, status: targetCol, oldStatus: task.status });
     },
     [tasks.data, canDragAny, user?.id, statusMutation]
   );
