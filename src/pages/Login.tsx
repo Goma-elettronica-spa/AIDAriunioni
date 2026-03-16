@@ -84,7 +84,7 @@ export default function Login() {
           </form>
 
           {success && (
-            <p className="mt-4 text-sm text-center text-green-600 font-medium">
+            <p className="mt-4 text-sm text-center font-medium" style={{ color: "hsl(var(--status-done))" }}>
               Controlla la tua email per il magic link
             </p>
           )}
