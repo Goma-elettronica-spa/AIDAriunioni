@@ -327,8 +327,10 @@ export default function MeetingDetailPage() {
           <TabsList className="w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0">
             {[
               { value: "overview", label: "Overview" },
-              { value: "materiale", label: "Materiale" },
+              { value: "attachments", label: "Attachments" },
+              { value: "post_meeting", label: "Post Meeting" },
               { value: "tasks", label: "Task" },
+              { value: "kpi", label: "KPI" },
             ].map((tab) => (
               <TabsTrigger
                 key={tab.value}
@@ -344,7 +346,10 @@ export default function MeetingDetailPage() {
             <TabsContent value="overview">
               <OverviewTab meeting={m} isAdmin={isAdmin} />
             </TabsContent>
-            <TabsContent value="materiale">
+            <TabsContent value="attachments">
+              <AttachmentsTab meeting={m} />
+            </TabsContent>
+            <TabsContent value="post_meeting">
               <MaterialeTab meeting={m} isAdmin={isAdmin} />
             </TabsContent>
             <TabsContent value="tasks">
@@ -357,6 +362,9 @@ export default function MeetingDetailPage() {
                 triggerGenerate={triggerGenerate}
                 onGenerateHandled={() => setTriggerGenerate(false)}
               />
+            </TabsContent>
+            <TabsContent value="kpi">
+              <KpiTab meetingId={m.id} tenantId={m.tenant_id} />
             </TabsContent>
           </div>
         </Tabs>
