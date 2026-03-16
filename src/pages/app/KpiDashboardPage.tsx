@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -223,7 +223,7 @@ function KpiByUserSection({ tenantId }: { tenantId: string }) {
 
   const userKpis = useQuery({
     queryKey: ["kpi-dashboard-user-kpis", selectedUserId],
-    enabled: !!selectedUserId,
+    enabled: !!selectedUserId && selectedUserId !== "__all__",
     queryFn: async () => {
       const { data: defs, error: defsErr } = await supabase
         .from("kpi_definitions")
@@ -267,6 +267,84 @@ function KpiByUserSection({ tenantId }: { tenantId: string }) {
     },
   });
 
+  const allUsersKpis = useQuery({
+    queryKey: ["kpi-dashboard-all-users-kpis", tenantId],
+    enabled: !!tenantId && selectedUserId === "__all__",
+    queryFn: async () => {
+      // Fetch ALL active kpi_definitions for the tenant with user info
+      const { data: defs, error: defsErr } = await supabase
+        .from("kpi_definitions")
+        .select("id, name, unit, direction, target_value, user_id, users(full_name)")
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .order("name");
+      if (defsErr) throw defsErr;
+      if (!defs?.length) return [];
+
+      const kpiIds = defs.map((d) => d.id);
+
+      // Fetch ALL kpi_entries for these KPIs
+      const { data: entries, error: entriesErr } = await supabase
+        .from("kpi_entries")
+        .select("id, kpi_id, current_value, delta, delta_percent, is_improved, meeting_id, meetings(scheduled_date)")
+        .in("kpi_id", kpiIds)
+        .order("meetings(scheduled_date)", { ascending: false });
+      if (entriesErr) throw entriesErr;
+
+      // Group entries by kpi_id
+      const entriesByKpi = new Map<string, any[]>();
+      for (const e of entries ?? []) {
+        const list = entriesByKpi.get(e.kpi_id) ?? [];
+        list.push(e);
+        entriesByKpi.set(e.kpi_id, list);
+      }
+
+      // Group defs by user
+      const byUser = new Map<string, { userName: string; kpis: any[] }>();
+      for (const d of defs) {
+        const userId = d.user_id;
+        const userName = (d as any).users?.full_name ?? "Utente sconosciuto";
+        if (!byUser.has(userId)) {
+          byUser.set(userId, { userName, kpis: [] });
+        }
+        const kpiEntries = entriesByKpi.get(d.id) ?? [];
+        const latest = kpiEntries[0] ?? null;
+        const sparkValues = kpiEntries
+          .slice()
+          .reverse()
+          .slice(-12)
+          .map((e: any) => e.current_value);
+        byUser.get(userId)!.kpis.push({
+          ...d,
+          latest,
+          sparkValues,
+        });
+      }
+
+      // Also include users that have no KPIs from the tenant
+      const { data: allUsers } = await supabase
+        .from("users")
+        .select("id, full_name")
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .order("full_name");
+      for (const u of allUsers ?? []) {
+        if (!byUser.has(u.id)) {
+          byUser.set(u.id, { userName: u.full_name, kpis: [] });
+        }
+      }
+
+      // Sort by user name
+      return Array.from(byUser.entries())
+        .map(([userId, data]) => ({
+          userId,
+          userName: data.userName,
+          kpis: data.kpis,
+        }))
+        .sort((a, b) => a.userName.localeCompare(b.userName));
+    },
+  });
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -281,6 +359,7 @@ function KpiByUserSection({ tenantId }: { tenantId: string }) {
             <SelectValue placeholder="Seleziona utente..." />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="__all__">Tutti gli utenti</SelectItem>
             {(tenantUsers.data ?? []).map((u) => (
               <SelectItem key={u.id} value={u.id}>
                 {u.full_name}
@@ -298,6 +377,122 @@ function KpiByUserSection({ tenantId }: { tenantId: string }) {
             </p>
           </CardContent>
         </Card>
+      ) : selectedUserId === "__all__" ? (
+        /* ── All Users Table View ── */
+        allUsersKpis.isLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : !allUsersKpis.data?.length ? (
+          <Card className="border border-dashed border-border">
+            <CardContent className="p-6 text-center py-8">
+              <TrendingUp className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">Nessun KPI disponibile</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border border-border">
+            <CardContent className="p-6">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="py-3 px-4">KPI Nome</TableHead>
+                      <TableHead className="py-3 px-4">Valore Attuale</TableHead>
+                      <TableHead className="py-3 px-4">Delta</TableHead>
+                      <TableHead className="py-3 px-4">Delta %</TableHead>
+                      <TableHead className="py-3 px-4">Trend</TableHead>
+                      <TableHead className="py-3 px-4">Target</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allUsersKpis.data.map((userGroup) => (
+                      <Fragment key={userGroup.userId}>
+                        {/* User header row */}
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                          <TableCell colSpan={6} className="py-3 px-4">
+                            <span className="text-sm font-bold text-foreground">
+                              {userGroup.userName}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                        {userGroup.kpis.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="py-3 px-4">
+                              <span className="text-sm text-muted-foreground">Nessun KPI</span>
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          userGroup.kpis.map((kpi: any) => {
+                            const latest = kpi.latest;
+                            const improved = latest?.is_improved === true;
+                            const deltaColorClass = improved ? "text-emerald-600" : "text-red-600";
+                            const DeltaIcon = improved ? ArrowUp : ArrowDown;
+                            return (
+                              <TableRow key={kpi.id}>
+                                <TableCell className="py-3 px-4">
+                                  <span className="flex items-center text-sm font-medium text-foreground">
+                                    {kpi.name}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="py-3 px-4">
+                                  <span className="flex items-center text-sm text-foreground">
+                                    {latest
+                                      ? formatNumber(latest.current_value, kpi.unit)
+                                      : "—"}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="py-3 px-4">
+                                  {latest?.delta != null ? (
+                                    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${deltaColorClass}`}>
+                                      <DeltaIcon className="h-3 w-3" />
+                                      {latest.delta > 0 ? "+" : ""}
+                                      {latest.delta.toLocaleString("it-IT")}
+                                    </span>
+                                  ) : (
+                                    <span className="flex items-center text-sm text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="py-3 px-4">
+                                  {latest?.delta_percent != null ? (
+                                    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${deltaColorClass}`}>
+                                      {latest.delta_percent > 0 ? "+" : ""}
+                                      {latest.delta_percent.toFixed(1)}%
+                                    </span>
+                                  ) : (
+                                    <span className="flex items-center text-sm text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="py-3 px-4">
+                                  <div className="flex items-center">
+                                    {kpi.sparkValues.length > 1 ? (
+                                      <Sparkline values={kpi.sparkValues} width={80} height={24} />
+                                    ) : (
+                                      <span className="text-sm text-muted-foreground">—</span>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="py-3 px-4">
+                                  <span className="flex items-center text-sm text-foreground">
+                                    {kpi.target_value != null
+                                      ? formatNumber(kpi.target_value, kpi.unit)
+                                      : "—"}
+                                  </span>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </Fragment>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )
       ) : userKpis.isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
