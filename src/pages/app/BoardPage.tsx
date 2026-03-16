@@ -374,6 +374,35 @@ export default function BoardPage() {
     },
   });
 
+  // Delete task mutation
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (taskId: string) => {
+      // Delete subtasks first
+      await supabase.from("board_tasks").delete().eq("parent_task_id", taskId);
+      const { error } = await supabase.from("board_tasks").delete().eq("id", taskId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["board-tasks"] });
+      if (selectedTask) {
+        writeAuditLog({
+          tenantId: tenantId!,
+          userId: user!.id,
+          action: "delete",
+          entityType: "board_task",
+          entityId: selectedTask.id,
+          oldValues: { title: selectedTask.title },
+        });
+      }
+      setSelectedTask(null);
+      setDeleteConfirmOpen(false);
+      toast({ title: "Task eliminato" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
   // Open task detail sheet
   const openTaskDetail = useCallback((task: BoardTask) => {
     setSelectedTask(task);
