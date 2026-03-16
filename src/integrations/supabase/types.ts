@@ -78,6 +78,48 @@ export type Database = {
           },
         ]
       }
+      board_roles: {
+        Row: {
+          created_at: string
+          description: string | null
+          functional_area_id: string | null
+          id: string
+          name: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          functional_area_id?: string | null
+          id?: string
+          name: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          functional_area_id?: string | null
+          id?: string
+          name?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "board_roles_functional_area_id_fkey"
+            columns: ["functional_area_id"]
+            isOneToOne: false
+            referencedRelation: "functional_areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "board_roles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       board_tasks: {
         Row: {
           created_at: string
@@ -303,6 +345,38 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      functional_areas: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "functional_areas_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -887,9 +961,11 @@ export type Database = {
       }
       users: {
         Row: {
+          board_role_id: string | null
           created_at: string
           email: string
           full_name: string
+          functional_area_id: string | null
           id: string
           is_active: boolean
           job_title: string | null
@@ -898,9 +974,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          board_role_id?: string | null
           created_at?: string
           email: string
           full_name: string
+          functional_area_id?: string | null
           id: string
           is_active?: boolean
           job_title?: string | null
@@ -909,9 +987,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          board_role_id?: string | null
           created_at?: string
           email?: string
           full_name?: string
+          functional_area_id?: string | null
           id?: string
           is_active?: boolean
           job_title?: string | null
@@ -920,6 +1000,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "users_board_role_id_fkey"
+            columns: ["board_role_id"]
+            isOneToOne: false
+            referencedRelation: "board_roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "users_functional_area_id_fkey"
+            columns: ["functional_area_id"]
+            isOneToOne: false
+            referencedRelation: "functional_areas"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "users_tenant_id_fkey"
             columns: ["tenant_id"]
