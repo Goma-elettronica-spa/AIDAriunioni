@@ -127,7 +127,7 @@ export default function MeetingDetailPage() {
             .select("id", { count: "exact", head: true })
             .eq("meeting_id", mid)
             .eq("user_id", uid)
-            .in("kpi_definition_id", requiredKpiIds);
+            .in("kpi_id", requiredKpiIds);
           requiredKpiFilled = filledCount ?? 0;
         }
       }
