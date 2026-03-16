@@ -31,6 +31,7 @@ const statusConfig: Record<string, { label: string; dotClass: string; order: num
   pre_meeting: { label: "Pre-Meeting", dotClass: "bg-[hsl(var(--status-waiting))]", order: 1 },
   in_progress: { label: "In Corso", dotClass: "bg-[hsl(var(--status-wip))]", order: 2 },
   completed: { label: "Completata", dotClass: "bg-[hsl(var(--status-done))]", order: 3 },
+  stuck: { label: "Bloccata", dotClass: "bg-red-500", order: 4 },
 };
 
 const statusFlow = ["draft", "pre_meeting", "in_progress", "completed"];
@@ -42,6 +43,18 @@ function getQuarter(date: Date): string {
 
 function StatusDot({ className }: { className: string }) {
   return <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${className}`} />;
+}
+
+function getDisplayStatus(meeting: { status: string; scheduled_date: string }): string {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const scheduled = new Date(meeting.scheduled_date);
+  scheduled.setHours(0, 0, 0, 0);
+
+  if (scheduled < today && meeting.status !== "completed") {
+    return "stuck";
+  }
+  return meeting.status;
 }
 
 export default function MeetingsPage() {
@@ -118,7 +131,16 @@ export default function MeetingsPage() {
   const filtered = useMemo(() => {
     if (!meetings.data) return [];
     return meetings.data.filter((m) => {
-      if (statusFilter !== "all" && m.status !== statusFilter) return false;
+      const displayStatus = getDisplayStatus(m);
+      if (statusFilter !== "all") {
+        if (statusFilter === "stuck") {
+          if (displayStatus !== "stuck") return false;
+        } else {
+          if (m.status !== statusFilter) return false;
+          // If filtering for a specific non-stuck status, exclude meetings that display as stuck
+          if (displayStatus === "stuck") return false;
+        }
+      }
       if (quarterFilter !== "all" && m.quarter !== quarterFilter) return false;
       return true;
     });
@@ -210,6 +232,7 @@ export default function MeetingsPage() {
             <SelectItem value="pre_meeting">Pre-Meeting</SelectItem>
             <SelectItem value="in_progress">In Corso</SelectItem>
             <SelectItem value="completed">Completata</SelectItem>
+            <SelectItem value="stuck">Bloccata</SelectItem>
           </SelectContent>
         </Select>
 
@@ -253,7 +276,8 @@ export default function MeetingsPage() {
       ) : (
         <div className="space-y-3">
           {filtered.map((m) => {
-            const sc = statusConfig[m.status] ?? statusConfig.draft;
+            const displayStatus = getDisplayStatus(m);
+            const sc = statusConfig[displayStatus] ?? statusConfig.draft;
             const progress = preMeetingProgress.data?.[m.id];
             const progressPercent =
               progress && progress.total > 0
@@ -269,7 +293,7 @@ export default function MeetingsPage() {
                 className="border border-border hover:bg-muted/20 transition-colors cursor-pointer"
                 onClick={() => navigate(`/meetings/${m.id}`)}
               >
-                <CardContent className="p-card-padding">
+                <CardContent className="p-6">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                     {/* Info */}
                     <div className="flex-1 min-w-0 space-y-1.5">
@@ -277,11 +301,17 @@ export default function MeetingsPage() {
                         <h3 className="text-base font-semibold text-foreground">
                           {m.title}
                         </h3>
-                        <Badge variant="secondary" className="text-xs font-normal gap-1.5">
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "inline-flex items-center text-xs font-normal gap-1.5",
+                            displayStatus === "stuck" && "bg-red-50 text-red-700"
+                          )}
+                        >
                           <StatusDot className={sc.dotClass} />
                           {sc.label}
                         </Badge>
-                        <Badge variant="outline" className="text-xs font-mono">
+                        <Badge variant="outline" className="inline-flex items-center text-xs font-mono">
                           {m.quarter}
                         </Badge>
                       </div>
@@ -447,7 +477,7 @@ export default function MeetingsPage() {
                   createMutation.isPending || !title.trim() || !scheduledDate
                 }
               >
-                {createMutation.isPending ? "Creazione…" : "Crea Riunione"}
+                {createMutation.isPending ? "Creazione..." : "Crea Riunione"}
               </Button>
             </DialogFooter>
           </form>

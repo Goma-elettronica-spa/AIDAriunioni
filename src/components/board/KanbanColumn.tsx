@@ -8,7 +8,7 @@ interface KanbanColumnProps {
   tasks: BoardTask[];
   canDragAny: boolean;
   currentUserId?: string;
-  onStatusChange: (taskId: string, status: string) => void;
+  onTaskClick?: (task: BoardTask) => void;
 }
 
 export function KanbanColumn({
@@ -16,7 +16,7 @@ export function KanbanColumn({
   tasks,
   canDragAny,
   currentUserId,
-  onStatusChange,
+  onTaskClick,
 }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
@@ -46,7 +46,7 @@ export function KanbanColumn({
             key={task.id}
             task={task}
             canDrag={canDragAny || task.owner_user_id === currentUserId}
-            onStatusChange={onStatusChange}
+            onClick={onTaskClick}
           />
         ))}
         {tasks.length === 0 && (

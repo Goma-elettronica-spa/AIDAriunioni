@@ -14,6 +14,9 @@ import {
   Plus,
   AlertTriangle,
   CheckCircle2,
+  Check,
+  X,
+  Circle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,6 +57,11 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const tenantId = user?.tenant_id;
 
+  const showChecklist =
+    user?.role === "dirigente" ||
+    user?.role === "org_admin" ||
+    user?.role === "information_officer";
+
   // Next meeting
   const nextMeeting = useQuery({
     queryKey: ["dashboard-next-meeting", tenantId],
@@ -69,6 +77,82 @@ export default function DashboardPage() {
         .maybeSingle();
       if (error) throw error;
       return data;
+    },
+  });
+
+  // "Cosa devi fare" checklist queries
+  const meetingId = nextMeeting.data?.id;
+  const meetingStatus = nextMeeting.data?.status;
+
+  const checklistKpi = useQuery({
+    queryKey: ["checklist-kpi", meetingId, user?.id],
+    enabled: !!meetingId && !!user?.id && showChecklist && meetingStatus === "pre_meeting",
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("kpi_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("meeting_id", meetingId!)
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      return (count ?? 0) > 0;
+    },
+  });
+
+  const checklistHighlights = useQuery({
+    queryKey: ["checklist-highlights", meetingId, user?.id],
+    enabled: !!meetingId && !!user?.id && showChecklist && meetingStatus === "pre_meeting",
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("highlights")
+        .select("id", { count: "exact", head: true })
+        .eq("meeting_id", meetingId!)
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      return (count ?? 0) >= 3;
+    },
+  });
+
+  const checklistCommitments = useQuery({
+    queryKey: ["checklist-commitments", meetingId, user?.id],
+    enabled: !!meetingId && !!user?.id && showChecklist && meetingStatus === "pre_meeting",
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("commitments")
+        .select("id", { count: "exact", head: true })
+        .eq("meeting_id", meetingId!)
+        .eq("user_id", user!.id)
+        .eq("type", "monthly");
+      if (error) throw error;
+      return (count ?? 0) > 0;
+    },
+  });
+
+  const checklistTasks = useQuery({
+    queryKey: ["checklist-tasks", meetingId, user?.id],
+    enabled: !!meetingId && !!user?.id && showChecklist && meetingStatus === "pre_meeting",
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("board_tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("meeting_id", meetingId!)
+        .eq("created_by_user_id", user!.id)
+        .eq("source", "pre_meeting");
+      if (error) throw error;
+      return (count ?? 0) > 0;
+    },
+  });
+
+  const checklistSlides = useQuery({
+    queryKey: ["checklist-slides", meetingId, user?.id],
+    enabled: !!meetingId && !!user?.id && showChecklist && meetingStatus === "pre_meeting",
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("slide_uploads")
+        .select("id", { count: "exact", head: true })
+        .eq("meeting_id", meetingId!)
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      return (count ?? 0) > 0;
     },
   });
 
@@ -261,6 +345,25 @@ export default function DashboardPage() {
     ? Math.round((progress.completed / progress.total) * 100)
     : 0;
 
+  // Checklist computations
+  const allRequiredDone =
+    checklistKpi.data === true &&
+    checklistHighlights.data === true &&
+    checklistCommitments.data === true;
+
+  const deadlineDays = meeting?.pre_meeting_deadline
+    ? daysUntil(meeting.pre_meeting_deadline)
+    : null;
+
+  const deadlineColorClass =
+    deadlineDays !== null
+      ? deadlineDays < 3
+        ? "text-red-600"
+        : deadlineDays < 7
+          ? "text-yellow-600"
+          : "text-emerald-600"
+      : "";
+
   return (
     <div className="space-y-section-gap">
       {/* Header */}
@@ -278,11 +381,110 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Cosa devi fare checklist */}
+      {showChecklist && meeting && meetingStatus === "pre_meeting" && (
+        <Card className="border-2 border-primary/20 bg-primary/[0.02]">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-foreground">
+                Cosa devi fare per la prossima riunione
+              </h2>
+              {deadlineDays !== null && (
+                <span className={`text-sm font-medium ${deadlineColorClass}`}>
+                  {deadlineDays > 0
+                    ? `Mancano ${deadlineDays} giorni alla deadline`
+                    : deadlineDays === 0
+                      ? "Deadline oggi!"
+                      : `Deadline scaduta da ${Math.abs(deadlineDays)} giorni`}
+                </span>
+              )}
+            </div>
+
+            {allRequiredDone && (
+              <div className="flex items-center gap-2 mb-4 rounded-md bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 px-4 py-2.5">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+                <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                  Preparazione completata!
+                </span>
+              </div>
+            )}
+
+            <div className="space-y-2.5 mb-5">
+              {/* KPI */}
+              <div className="flex items-center gap-3">
+                {checklistKpi.data ? (
+                  <Check className="h-5 w-5 text-emerald-600 shrink-0" />
+                ) : (
+                  <X className="h-5 w-5 text-red-500 shrink-0" />
+                )}
+                <span className="text-sm text-foreground">
+                  {checklistKpi.data ? "KPI compilati" : "KPI da compilare"}
+                </span>
+              </div>
+
+              {/* Highlights */}
+              <div className="flex items-center gap-3">
+                {checklistHighlights.data ? (
+                  <Check className="h-5 w-5 text-emerald-600 shrink-0" />
+                ) : (
+                  <X className="h-5 w-5 text-red-500 shrink-0" />
+                )}
+                <span className="text-sm text-foreground">
+                  {checklistHighlights.data ? "3 Highlight inseriti" : "Highlight da inserire"}
+                </span>
+              </div>
+
+              {/* Commitments */}
+              <div className="flex items-center gap-3">
+                {checklistCommitments.data ? (
+                  <Check className="h-5 w-5 text-emerald-600 shrink-0" />
+                ) : (
+                  <X className="h-5 w-5 text-red-500 shrink-0" />
+                )}
+                <span className="text-sm text-foreground">
+                  {checklistCommitments.data ? "Impegni registrati" : "Impegni da registrare"}
+                </span>
+              </div>
+
+              {/* Tasks (optional) */}
+              <div className="flex items-center gap-3">
+                <Circle className="h-5 w-5 text-gray-400 shrink-0" />
+                <span className="text-sm text-muted-foreground">
+                  Task creati (opzionale)
+                  {checklistTasks.data && (
+                    <Check className="inline h-4 w-4 text-emerald-600 ml-1.5" />
+                  )}
+                </span>
+              </div>
+
+              {/* Slides (optional) */}
+              <div className="flex items-center gap-3">
+                <Circle className="h-5 w-5 text-gray-400 shrink-0" />
+                <span className="text-sm text-muted-foreground">
+                  Slide caricate (opzionale)
+                  {checklistSlides.data && (
+                    <Check className="inline h-4 w-4 text-emerald-600 ml-1.5" />
+                  )}
+                </span>
+              </div>
+            </div>
+
+            <Button
+              className="w-full bg-foreground text-background hover:bg-foreground/90 h-11 text-sm font-semibold"
+              onClick={() => navigate(`/meetings/${meeting.id}/pre-meeting`)}
+            >
+              Compila Pre-Meeting
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Prossima Riunione */}
         <Card className="border border-border">
-          <CardContent className="p-card-padding">
+          <CardContent className="p-6">
             <div className="flex items-center gap-2 mb-3">
               <div className="p-2 rounded-md bg-muted">
                 <CalendarDays className="h-4 w-4 text-muted-foreground" />
@@ -315,7 +517,7 @@ export default function DashboardPage() {
 
         {/* Pre-Meeting */}
         <Card className="border border-border">
-          <CardContent className="p-card-padding">
+          <CardContent className="p-6">
             <div className="flex items-center gap-2 mb-3">
               <div className="p-2 rounded-md bg-muted">
                 <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
@@ -339,7 +541,7 @@ export default function DashboardPage() {
 
         {/* Task Aperti */}
         <Card className="border border-border">
-          <CardContent className="p-card-padding">
+          <CardContent className="p-6">
             <div className="flex items-center gap-2 mb-3">
               <div className="p-2 rounded-md bg-muted">
                 <ListTodo className="h-4 w-4 text-muted-foreground" />
@@ -358,7 +560,7 @@ export default function DashboardPage() {
 
         {/* KPI in Calo */}
         <Card className="border border-border">
-          <CardContent className="p-card-padding">
+          <CardContent className="p-6">
             <div className="flex items-center gap-2 mb-3">
               <div className="p-2 rounded-md bg-muted">
                 <TrendingDown className="h-4 w-4 text-muted-foreground" />
@@ -385,7 +587,7 @@ export default function DashboardPage() {
 
         {/* Task in Ritardo */}
         <Card className="border border-border">
-          <CardContent className="p-card-padding">
+          <CardContent className="p-6">
             <div className="flex items-center gap-2 mb-3">
               <div className="p-2 rounded-md bg-red-50 dark:bg-red-950">
                 <AlertTriangle className="h-4 w-4 text-red-600" />
@@ -472,7 +674,7 @@ export default function DashboardPage() {
           <Skeleton className="h-32 w-full" />
         ) : meeting ? (
           <Card className="border border-border">
-            <CardContent className="p-card-padding">
+            <CardContent className="p-6">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -545,7 +747,7 @@ export default function DashboardPage() {
           </Card>
         ) : (
           <Card className="border border-dashed border-border">
-            <CardContent className="p-card-padding text-center py-12">
+            <CardContent className="p-6 text-center py-12">
               <CalendarDays className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
               <p className="text-sm text-muted-foreground mb-4">
                 Nessuna riunione programmata
@@ -584,7 +786,7 @@ export default function DashboardPage() {
           </div>
         ) : !recentTasks.data?.length ? (
           <Card className="border border-dashed border-border">
-            <CardContent className="p-card-padding text-center py-8">
+            <CardContent className="p-6 text-center py-8">
               <p className="text-sm text-muted-foreground">Nessun task presente</p>
             </CardContent>
           </Card>
@@ -657,7 +859,7 @@ export default function DashboardPage() {
           </div>
         ) : !overdueTasks.data?.length ? (
           <Card className="border border-border">
-            <CardContent className="p-card-padding text-center py-8">
+            <CardContent className="p-6 text-center py-8">
               <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-3" />
               <p className="text-sm font-medium text-foreground">Nessun task in ritardo</p>
             </CardContent>

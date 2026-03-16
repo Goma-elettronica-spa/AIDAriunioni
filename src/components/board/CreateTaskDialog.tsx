@@ -49,6 +49,7 @@ export function CreateTaskDialog({ open, onOpenChange, tenantId, currentUserId, 
   const [ownerId, setOwnerId] = useState(currentUserId);
   const [deadlineType, setDeadlineType] = useState("next_meeting");
   const [linkedKpi, setLinkedKpi] = useState("none");
+  const [customDate, setCustomDate] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -57,6 +58,7 @@ export function CreateTaskDialog({ open, onOpenChange, tenantId, currentUserId, 
       setOwnerId(currentUserId);
       setDeadlineType("next_meeting");
       setLinkedKpi("none");
+      setCustomDate("");
     }
   }, [open, currentUserId]);
 
@@ -102,6 +104,8 @@ export function CreateTaskDialog({ open, onOpenChange, tenantId, currentUserId, 
         deadlineDate = nextMeeting.data.scheduled_date;
       } else if (deadlineType === "end_quarter") {
         deadlineDate = getQuarterEnd(now);
+      } else if (deadlineType === "custom") {
+        deadlineDate = customDate;
       } else {
         deadlineDate = getNextQuarterEnd(now);
       }
@@ -218,7 +222,22 @@ export function CreateTaskDialog({ open, onOpenChange, tenantId, currentUserId, 
                   </span>
                 </Label>
               </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="custom" id="dl-custom" />
+                <Label htmlFor="dl-custom" className="font-normal text-sm cursor-pointer">
+                  Data personalizzata
+                </Label>
+              </div>
             </RadioGroup>
+            {deadlineType === "custom" && (
+              <Input
+                type="date"
+                value={customDate}
+                onChange={(e) => setCustomDate(e.target.value)}
+                min={new Date().toISOString().split("T")[0]}
+                required
+              />
+            )}
           </div>
 
           {(kpis.data?.length ?? 0) > 0 && (
@@ -242,8 +261,11 @@ export function CreateTaskDialog({ open, onOpenChange, tenantId, currentUserId, 
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Annulla
             </Button>
-            <Button type="submit" disabled={createMutation.isPending || !title.trim()}>
-              {createMutation.isPending ? "Creazione…" : "Crea Task"}
+            <Button
+              type="submit"
+              disabled={createMutation.isPending || !title.trim() || (deadlineType === "custom" && !customDate)}
+            >
+              {createMutation.isPending ? "Creazione..." : "Crea Task"}
             </Button>
           </DialogFooter>
         </form>
