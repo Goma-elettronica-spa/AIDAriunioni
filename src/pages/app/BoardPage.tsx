@@ -12,7 +12,7 @@ import {
   type DragStartEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Plus } from "lucide-react";
+import { Plus, Sparkles, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -45,6 +46,7 @@ export type BoardTask = {
   kpi_name: string | null;
   meeting_id: string;
   created_by_user_id: string;
+  parent_task_id?: string | null;
 };
 
 export const columns = [
@@ -92,8 +94,8 @@ const statusLabels: Record<string, string> = {
 };
 
 const sourceLabels: Record<string, string> = {
-  pre_meeting: "Pre-Meeting",
-  ai_suggested: "AI Suggerito",
+  pre_meeting: "Manuale",
+  ai_suggested: "AI",
   manual: "Manuale",
 };
 
@@ -118,6 +120,9 @@ export default function BoardPage() {
   const [editDeadlineDate, setEditDeadlineDate] = useState("");
   const [editLinkedKpi, setEditLinkedKpi] = useState("none");
 
+  // Subtask input state
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
@@ -129,7 +134,7 @@ export default function BoardPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("board_tasks")
-        .select("id, title, description, status, owner_user_id, deadline_date, deadline_type, source, linked_kpi_id, meeting_id, created_by_user_id")
+        .select("id, title, description, status, owner_user_id, deadline_date, deadline_type, source, linked_kpi_id, meeting_id, created_by_user_id, parent_task_id")
         .eq("tenant_id", tenantId!);
       if (error) throw error;
 
@@ -156,6 +161,21 @@ export default function BoardPage() {
       })) as BoardTask[];
     },
   });
+
+  // Compute subtask progress map from fetched tasks
+  const subtaskProgressMap = useMemo(() => {
+    if (!tasks.data) return new Map<string, { done: number; total: number }>();
+    const map = new Map<string, { done: number; total: number }>();
+    for (const t of tasks.data) {
+      if (t.parent_task_id) {
+        const current = map.get(t.parent_task_id) ?? { done: 0, total: 0 };
+        current.total += 1;
+        if (t.status === "done") current.done += 1;
+        map.set(t.parent_task_id, current);
+      }
+    }
+    return map;
+  }, [tasks.data]);
 
   // Fetch tenant users for filters & create dialog
   const tenantUsers = useQuery({
@@ -205,6 +225,21 @@ export default function BoardPage() {
     },
   });
 
+  // Subtasks for selected task
+  const subtasksQuery = useQuery({
+    queryKey: ["board-subtasks", selectedTask?.id],
+    enabled: !!selectedTask,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("board_tasks")
+        .select("id, title, status")
+        .eq("parent_task_id", selectedTask!.id)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data as { id: string; title: string; status: string }[];
+    },
+  });
+
   // Creator name for sheet
   const creatorName = useMemo(() => {
     if (!selectedTask || !tenantUsers.data) return "—";
@@ -223,6 +258,7 @@ export default function BoardPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["board-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["board-subtasks"] });
     },
     onError: (err: Error) => {
       toast({ title: "Errore", description: err.message, variant: "destructive" });
@@ -265,6 +301,53 @@ export default function BoardPage() {
     },
   });
 
+  // Create subtask mutation
+  const createSubtaskMutation = useMutation({
+    mutationFn: async (title: string) => {
+      if (!selectedTask || !tenantId) return;
+      const { error } = await supabase.from("board_tasks").insert({
+        title: title.trim(),
+        parent_task_id: selectedTask.id,
+        tenant_id: tenantId,
+        meeting_id: selectedTask.meeting_id,
+        owner_user_id: selectedTask.owner_user_id,
+        created_by_user_id: user?.id ?? selectedTask.created_by_user_id,
+        source: "pre_meeting",
+        deadline_type: "next_meeting",
+        deadline_date: selectedTask.deadline_date,
+        status: "todo",
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["board-subtasks"] });
+      queryClient.invalidateQueries({ queryKey: ["board-tasks"] });
+      setNewSubtaskTitle("");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
+  // Toggle subtask status mutation
+  const toggleSubtaskMutation = useMutation({
+    mutationFn: async ({ id, currentStatus }: { id: string; currentStatus: string }) => {
+      const newStatus = currentStatus === "done" ? "todo" : "done";
+      const { error } = await supabase
+        .from("board_tasks")
+        .update({ status: newStatus })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["board-subtasks"] });
+      queryClient.invalidateQueries({ queryKey: ["board-tasks"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
   // Open task detail sheet
   const openTaskDetail = useCallback((task: BoardTask) => {
     setSelectedTask(task);
@@ -274,6 +357,7 @@ export default function BoardPage() {
     setEditDeadlineType(task.deadline_type);
     setEditDeadlineDate(task.deadline_date);
     setEditLinkedKpi(task.linked_kpi_id ?? "none");
+    setNewSubtaskTitle("");
   }, []);
 
   // Permission check for editing
@@ -283,10 +367,11 @@ export default function BoardPage() {
     return selectedTask.created_by_user_id === user.id;
   }, [selectedTask, user]);
 
-  // Filtered tasks
+  // Filtered tasks — only top-level (parent_task_id is null)
   const filtered = useMemo(() => {
     if (!tasks.data) return [];
     return tasks.data.filter((t) => {
+      if (t.parent_task_id) return false;
       if (ownerFilter !== "all" && t.owner_user_id !== ownerFilter) return false;
       if (deadlineFilter !== "all" && t.deadline_type !== deadlineFilter) return false;
       if (meetingFilter !== "all" && t.meeting_id !== meetingFilter) return false;
@@ -338,6 +423,11 @@ export default function BoardPage() {
     },
     [tasks.data, canDragAny, user?.id, statusMutation]
   );
+
+  // Subtask summary
+  const subtaskList = subtasksQuery.data ?? [];
+  const subtaskDone = subtaskList.filter((s) => s.status === "done").length;
+  const subtaskTotal = subtaskList.length;
 
   return (
     <div className="space-y-6">
@@ -421,12 +511,19 @@ export default function BoardPage() {
                 canDragAny={canDragAny}
                 currentUserId={user?.id}
                 onTaskClick={openTaskDetail}
+                subtaskProgressMap={subtaskProgressMap}
               />
             ))}
           </div>
 
           <DragOverlay>
-            {activeTask && <TaskCard task={activeTask} isDragging />}
+            {activeTask && (
+              <TaskCard
+                task={activeTask}
+                isDragging
+                subtaskProgress={subtaskProgressMap.get(activeTask.id) ?? null}
+              />
+            )}
           </DragOverlay>
         </DndContext>
       )}
@@ -597,9 +694,83 @@ export default function BoardPage() {
               {/* Source (read-only) */}
               <div className="space-y-2">
                 <Label>Origine</Label>
-                <p className="text-sm text-muted-foreground">
-                  {sourceLabels[selectedTask.source] ?? selectedTask.source}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  {selectedTask.source === "ai_suggested" ? (
+                    <Sparkles className="h-3.5 w-3.5 text-violet-600" />
+                  ) : (
+                    <User className="h-3.5 w-3.5 text-muted-foreground" />
+                  )}
+                  <p className="text-sm text-muted-foreground">
+                    {sourceLabels[selectedTask.source] ?? selectedTask.source}
+                  </p>
+                </div>
+              </div>
+
+              {/* Sotto-task section */}
+              <div className="space-y-3 pt-2 border-t border-border">
+                <div className="flex items-center justify-between">
+                  <Label>Sotto-task</Label>
+                  {subtaskTotal > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {subtaskDone}/{subtaskTotal} completati
+                    </span>
+                  )}
+                </div>
+
+                {/* Subtask list */}
+                {subtaskList.length > 0 && (
+                  <div className="space-y-1.5">
+                    {subtaskList.map((sub) => (
+                      <div key={sub.id} className="flex items-center gap-2 p-6 border border-border rounded-md">
+                        <Checkbox
+                          checked={sub.status === "done"}
+                          onCheckedChange={() =>
+                            toggleSubtaskMutation.mutate({ id: sub.id, currentStatus: sub.status })
+                          }
+                        />
+                        <span
+                          className={`text-sm flex-1 ${
+                            sub.status === "done" ? "line-through text-muted-foreground" : "text-foreground"
+                          }`}
+                        >
+                          {sub.title}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {subtaskList.length === 0 && !subtasksQuery.isLoading && (
+                  <p className="text-xs text-muted-foreground">Nessun sotto-task</p>
+                )}
+
+                {/* Add subtask input */}
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Aggiungi sotto-task..."
+                    value={newSubtaskTitle}
+                    onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newSubtaskTitle.trim()) {
+                        e.preventDefault();
+                        createSubtaskMutation.mutate(newSubtaskTitle);
+                      }
+                    }}
+                    className="flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!newSubtaskTitle.trim() || createSubtaskMutation.isPending}
+                    onClick={() => {
+                      if (newSubtaskTitle.trim()) {
+                        createSubtaskMutation.mutate(newSubtaskTitle);
+                      }
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
 
               {/* Save button */}

@@ -1,6 +1,6 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Sparkles, FileText, Link2, CalendarDays } from "lucide-react";
+import { Sparkles, User, Link2, CalendarDays } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { BoardTask } from "@/pages/app/BoardPage";
 import { ownerColor } from "@/pages/app/BoardPage";
@@ -24,9 +24,10 @@ interface TaskCardProps {
   canDrag?: boolean;
   isDragging?: boolean;
   onClick?: (task: BoardTask) => void;
+  subtaskProgress?: { done: number; total: number } | null;
 }
 
-export function TaskCard({ task, canDrag = false, isDragging = false, onClick }: TaskCardProps) {
+export function TaskCard({ task, canDrag = false, isDragging = false, onClick, subtaskProgress }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: task.id,
     disabled: !canDrag,
@@ -44,6 +45,12 @@ export function TaskCard({ task, canDrag = false, isDragging = false, onClick }:
     .toUpperCase();
 
   const dlColor = deadlineColors[task.deadline_type] ?? deadlineColors.custom;
+
+  const hasSubtasks = subtaskProgress && subtaskProgress.total > 0;
+  const subtaskPercent = hasSubtasks
+    ? Math.round((subtaskProgress.done / subtaskProgress.total) * 100)
+    : 0;
+  const allDone = hasSubtasks && subtaskProgress.done === subtaskProgress.total;
 
   return (
     <div
@@ -80,11 +87,17 @@ export function TaskCard({ task, canDrag = false, isDragging = false, onClick }:
           {deadlineLabels[task.deadline_type] ?? task.deadline_type}
         </Badge>
 
-        {/* Source */}
+        {/* Source / Origin */}
         {task.source === "ai_suggested" ? (
-          <Sparkles className="h-3 w-3 text-muted-foreground" />
+          <Badge variant="outline" className="inline-flex items-center text-[10px] font-normal gap-1 py-0 bg-violet-50 text-violet-700 border-violet-200">
+            <Sparkles className="h-2.5 w-2.5" />
+            AI
+          </Badge>
         ) : (
-          <FileText className="h-3 w-3 text-muted-foreground" />
+          <Badge variant="outline" className="inline-flex items-center text-[10px] font-normal gap-1 py-0 bg-gray-50 text-gray-600 border-gray-200">
+            <User className="h-2.5 w-2.5" />
+            Manuale
+          </Badge>
         )}
 
         {/* KPI link */}
@@ -95,6 +108,26 @@ export function TaskCard({ task, canDrag = false, isDragging = false, onClick }:
           </Badge>
         )}
       </div>
+
+      {/* Subtask progress bar */}
+      {hasSubtasks && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-muted-foreground">
+              {subtaskProgress.done}/{subtaskProgress.total} sotto-task
+            </span>
+            <span className="text-[10px] text-muted-foreground font-mono">
+              {subtaskPercent}%
+            </span>
+          </div>
+          <div className="h-1 bg-muted rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${allDone ? "bg-emerald-500" : "bg-gray-400"}`}
+              style={{ width: `${subtaskPercent}%` }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -30,6 +30,7 @@ import {
 interface KpiDef {
   id: string;
   name: string;
+  description: string | null;
   unit: string;
   direction: string;
   target_value: number | null;
@@ -285,6 +286,11 @@ function KpiCard({
               <p className="text-sm text-muted-foreground">
                 {kpi.name} ({kpi.unit})
               </p>
+              {kpi.description && (
+                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                  {kpi.description}
+                </p>
+              )}
               {latest ? (
                 <p className="text-2xl font-bold text-foreground mt-1">
                   {formatNumber(latest.current_value, kpi.unit)}
@@ -497,7 +503,7 @@ export default function MyKpisPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("kpi_definitions")
-        .select("id, name, unit, direction, target_value")
+        .select("id, name, description, unit, direction, target_value")
         .eq("user_id", activeUserId!)
         .eq("is_active", true)
         .order("name");

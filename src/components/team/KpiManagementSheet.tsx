@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -41,6 +42,7 @@ interface KpiManagementSheetProps {
 type KpiRow = {
   id: string;
   name: string;
+  description: string | null;
   unit: string;
   direction: string;
   target_value: number | null;
@@ -54,6 +56,7 @@ type KpiRow = {
 
 type KpiFormData = {
   name: string;
+  description: string;
   unit: string;
   direction: string;
   target_value: string;
@@ -62,6 +65,7 @@ type KpiFormData = {
 
 const emptyForm: KpiFormData = {
   name: "",
+  description: "",
   unit: "",
   direction: "up_is_good",
   target_value: "",
@@ -109,6 +113,7 @@ export default function KpiManagementSheet({
     mutationFn: async (form: KpiFormData) => {
       const { error } = await supabase.from("kpi_definitions").insert({
         name: form.name.trim(),
+        description: form.description.trim() || null,
         unit: form.unit.trim(),
         direction: form.direction,
         target_value: form.target_value.trim() ? Number(form.target_value) : null,
@@ -137,6 +142,7 @@ export default function KpiManagementSheet({
         .from("kpi_definitions")
         .update({
           name: form.name.trim(),
+          description: form.description.trim() || null,
           unit: form.unit.trim(),
           direction: form.direction,
           target_value: form.target_value.trim() ? Number(form.target_value) : null,
@@ -206,6 +212,7 @@ export default function KpiManagementSheet({
     setEditingId(kpi.id);
     setEditForm({
       name: kpi.name,
+      description: kpi.description ?? "",
       unit: kpi.unit,
       direction: kpi.direction,
       target_value: kpi.target_value != null ? String(kpi.target_value) : "",
@@ -286,6 +293,11 @@ export default function KpiManagementSheet({
                           {kpi.is_required ? "Obbligatorio" : "Opzionale"}
                         </Badge>
                       </div>
+                      {kpi.description && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                          {kpi.description}
+                        </p>
+                      )}
                       {kpi.target_value != null && (
                         <p className="text-xs text-muted-foreground mt-1">
                           {formatTarget(kpi.target_value, kpi.unit)}
@@ -416,6 +428,15 @@ function KpiForm({
           onChange={(e) => onChange({ ...form, name: e.target.value })}
           placeholder="Es. Fatturato, NPS, Margine Operativo"
           required
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Descrizione</Label>
+        <Textarea
+          value={form.description}
+          onChange={(e) => onChange({ ...form, description: e.target.value })}
+          placeholder="Descrizione opzionale del KPI"
+          rows={2}
         />
       </div>
       <div className="space-y-2">
