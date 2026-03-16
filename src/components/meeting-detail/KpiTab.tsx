@@ -44,9 +44,11 @@ export function KpiTab({ meetingId, tenantId }: Props) {
           : { data: [] },
       ]);
 
-      const kpiMap = new Map(kpis.data?.map((k) => [k.id, k]) ?? []);
-      const userMap = new Map(users.data?.map((u) => [u.id, u.full_name]) ?? []);
-      const varianceMap = new Map<string, typeof variances.data>();
+      const kpiMap = new Map<string, { name: string; unit: string }>();
+      for (const k of kpis.data ?? []) kpiMap.set(k.id, { name: k.name, unit: k.unit });
+      const userMap = new Map<string, string>();
+      for (const u of users.data ?? []) userMap.set(u.id, u.full_name);
+      const varianceMap = new Map<string, Array<{ kpi_entry_id: string; reason: string; delta_portion: number | null; direction: string }>>();
       for (const v of variances.data ?? []) {
         if (!varianceMap.has(v.kpi_entry_id)) varianceMap.set(v.kpi_entry_id, []);
         varianceMap.get(v.kpi_entry_id)!.push(v);

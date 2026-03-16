@@ -38,7 +38,8 @@ export function HighlightsTab({ meetingId, tenantId }: Props) {
       const { data: users } = userIds.length
         ? await supabase.from("users").select("id, full_name, job_title").in("id", userIds)
         : { data: [] };
-      const userMap = new Map(users?.map((u) => [u.id, u]) ?? []);
+      const userMap = new Map<string, { full_name: string; job_title: string | null }>();
+      for (const u of users?.data ?? []) userMap.set(u.id, { full_name: u.full_name, job_title: u.job_title });
 
       // Group by user
       const grouped = new Map<string, { user: { full_name: string; job_title: string | null }; items: typeof data }>();
@@ -46,7 +47,7 @@ export function HighlightsTab({ meetingId, tenantId }: Props) {
         if (!grouped.has(h.user_id)) {
           const u = userMap.get(h.user_id);
           grouped.set(h.user_id, {
-            user: { full_name: u?.full_name ?? "—", job_title: u?.job_title ?? null },
+            user: u ?? { full_name: "—", job_title: null },
             items: [],
           });
         }

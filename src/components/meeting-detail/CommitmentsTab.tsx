@@ -30,7 +30,8 @@ export function CommitmentsTab({ meetingId, tenantId }: Props) {
       const { data: users } = userIds.length
         ? await supabase.from("users").select("id, full_name").in("id", userIds)
         : { data: [] };
-      const userMap = new Map(users?.map((u) => [u.id, u.full_name]) ?? []);
+      const userMap = new Map<string, string>();
+      for (const u of users?.data ?? []) userMap.set(u.id, u.full_name);
 
       const grouped = new Map<string, { name: string; items: typeof data }>();
       for (const c of data) {
