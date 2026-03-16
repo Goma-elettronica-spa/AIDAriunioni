@@ -861,7 +861,7 @@ export type Database = {
           plan: string
           slug: string
           updated_at: string
-          vat_number: string | null
+          vat_number: string
         }
         Insert: {
           created_at?: string
@@ -871,7 +871,7 @@ export type Database = {
           plan?: string
           slug: string
           updated_at?: string
-          vat_number?: string | null
+          vat_number: string
         }
         Update: {
           created_at?: string
@@ -881,7 +881,7 @@ export type Database = {
           plan?: string
           slug?: string
           updated_at?: string
-          vat_number?: string | null
+          vat_number?: string
         }
         Relationships: []
       }
@@ -938,11 +938,31 @@ export type Database = {
       current_user_tenant_id: { Args: never; Returns: string }
       is_io_or_admin: { Args: never; Returns: boolean }
       is_superadmin: { Args: never; Returns: boolean }
+      register_and_join_tenant: {
+        Args: {
+          p_email: string
+          p_full_name: string
+          p_tenant_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      register_with_new_tenant: {
+        Args: {
+          p_email: string
+          p_full_name: string
+          p_tenant_name: string
+          p_user_id: string
+          p_vat_number: string
+        }
+        Returns: Json
+      }
       search_tenant_by_vat: {
-        Args: { p_vat: string }
+        Args: { p_query: string }
         Returns: {
           id: string
           name: string
+          vat_number: string
         }[]
       }
     }
