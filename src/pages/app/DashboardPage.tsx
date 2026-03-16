@@ -604,7 +604,7 @@ export default function DashboardPage() {
               variant="ghost"
               size="sm"
               className="text-muted-foreground"
-              onClick={() => navigate("/my-kpis")}
+              onClick={() => navigate("/kpi")}
             >
               Vedi tutti i tuoi KPI
               <ArrowRight className="h-3.5 w-3.5 ml-1" />
@@ -619,7 +619,7 @@ export default function DashboardPage() {
                 <div
                   key={kpi.id}
                   className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer"
-                  onClick={() => navigate("/my-kpis")}
+                  onClick={() => navigate("/kpi")}
                 >
                   <p className="text-sm font-medium text-foreground truncate min-w-0 flex-1">
                     {kpi.name}
@@ -836,7 +836,7 @@ export default function DashboardPage() {
             variant="ghost"
             size="sm"
             className="text-muted-foreground"
-            onClick={() => navigate("/kpi-dashboard")}
+            onClick={() => navigate("/kpi")}
           >
             Vedi tutti
             <ArrowRight className="h-3.5 w-3.5 ml-1" />

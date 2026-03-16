@@ -1,0 +1,962 @@
+import { useState, useMemo, Fragment } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { Sparkline } from "@/components/ui/sparkline";
+import {
+  ArrowUp,
+  ArrowDown,
+  TrendingUp,
+  AlertTriangle,
+  CheckCircle2,
+  BarChart3,
+  Users,
+} from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface KpiDef {
+  id: string;
+  name: string;
+  description: string | null;
+  unit: string;
+  direction: string;
+  target_value: number | null;
+}
+
+interface KpiEntryWithMeeting {
+  id: string;
+  kpi_id: string;
+  current_value: number;
+  previous_value: number | null;
+  delta: number | null;
+  delta_percent: number | null;
+  is_improved: boolean | null;
+  meeting_id: string;
+  meeting_title: string;
+  meeting_date: string;
+}
+
+interface VarianceExplanation {
+  id: string;
+  kpi_entry_id: string;
+  reason: string;
+  delta_portion: number | null;
+  delta_portion_percent: number | null;
+  direction: string;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatNumber(v: number, unit: string): string {
+  if (unit === "%" || unit === "percent") return `${v.toLocaleString("it-IT")}%`;
+  if (unit === "EUR" || unit === "eur") return `${v.toLocaleString("it-IT")} \u20ac`;
+  return v.toLocaleString("it-IT");
+}
+
+const taskStatusConfig: Record<string, { label: string; colorClass: string; dotClass: string }> = {
+  todo: { label: "Da fare", colorClass: "bg-gray-100 text-gray-700", dotClass: "bg-[hsl(var(--status-todo))]" },
+  wip: { label: "In corso", colorClass: "bg-blue-100 text-blue-700", dotClass: "bg-[hsl(var(--status-wip))]" },
+  stuck: { label: "Bloccato", colorClass: "bg-red-100 text-red-700", dotClass: "bg-[hsl(var(--status-stuck))]" },
+  waiting_for: { label: "In attesa", colorClass: "bg-amber-100 text-amber-700", dotClass: "bg-[hsl(var(--status-waiting))]" },
+};
+
+function StatusDot({ className }: { className: string }) {
+  return <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${className}`} />;
+}
+
+function DeltaBadge({
+  delta,
+  deltaPercent,
+  isImproved,
+}: {
+  delta: number | null;
+  deltaPercent: number | null;
+  isImproved: boolean | null;
+}) {
+  if (delta == null) return null;
+  const improved = isImproved === true;
+  const colorClass = improved ? "text-emerald-600" : "text-red-600";
+  const Icon = improved ? ArrowUp : ArrowDown;
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${colorClass}`}>
+      <Icon className="h-3 w-3" />
+      {delta > 0 ? "+" : ""}
+      {delta.toLocaleString("it-IT")}
+      {deltaPercent != null && (
+        <span className="ml-0.5">
+          ({deltaPercent > 0 ? "+" : ""}
+          {deltaPercent.toFixed(1)}%)
+        </span>
+      )}
+    </span>
+  );
+}
+
+// ─── KPI Card (used in Section 1 & 3) ────────────────────────────────────────
+
+function KpiCard({
+  kpi,
+  entries,
+  varianceMap,
+  expanded,
+  onToggle,
+}: {
+  kpi: KpiDef;
+  entries: KpiEntryWithMeeting[];
+  varianceMap: Map<string, VarianceExplanation[]>;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const latest = entries[0] ?? null;
+  const sparkValues = entries
+    .slice()
+    .reverse()
+    .slice(-12)
+    .map((e) => e.current_value);
+
+  const progressPercent =
+    kpi.target_value != null && kpi.target_value > 0 && latest
+      ? Math.min(100, Math.round((latest.current_value / kpi.target_value) * 100))
+      : null;
+
+  const last6 = entries.slice(0, 6);
+
+  return (
+    <div>
+      <Card
+        className="border border-border cursor-pointer hover:bg-muted/30 transition-colors"
+        onClick={onToggle}
+      >
+        <CardContent className="p-6">
+          <div className="flex items-start justify-between mb-2">
+            <div>
+              <p className="text-sm text-muted-foreground">
+                {kpi.name} ({kpi.unit})
+              </p>
+              {latest ? (
+                <p className="text-2xl font-bold text-foreground mt-1">
+                  {formatNumber(latest.current_value, kpi.unit)}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground mt-1">Nessun dato</p>
+              )}
+            </div>
+            {sparkValues.length > 1 && (
+              <div className="text-muted-foreground">
+                <Sparkline values={sparkValues} width={120} height={32} />
+              </div>
+            )}
+          </div>
+
+          {latest && (
+            <div className="flex items-center gap-3 mt-2">
+              <DeltaBadge
+                delta={latest.delta}
+                deltaPercent={latest.delta_percent}
+                isImproved={latest.is_improved}
+              />
+            </div>
+          )}
+
+          {progressPercent != null && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                <span>Target: {formatNumber(kpi.target_value!, kpi.unit)}</span>
+                <span className="font-mono">{progressPercent}%</span>
+              </div>
+              <div className="h-1 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-foreground rounded-full transition-all"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {expanded && (
+        <Card className="border border-border mt-2">
+          <CardContent className="p-6">
+            {kpi.description && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                  Descrizione
+                </p>
+                <p className="text-sm text-foreground">{kpi.description}</p>
+              </div>
+            )}
+
+            {sparkValues.length > 1 && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  Storico
+                </p>
+                <div className="text-muted-foreground">
+                  <Sparkline values={sparkValues} width={320} height={64} />
+                </div>
+              </div>
+            )}
+
+            {last6.length > 0 && (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead className="text-right">Valore</TableHead>
+                      <TableHead className="text-right">Delta</TableHead>
+                      <TableHead>Stato</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {last6.map((entry) => {
+                      const explanations = varianceMap.get(entry.id) ?? [];
+                      return (
+                        <TableRow key={entry.id}>
+                          <TableCell>
+                            <span className="text-sm">
+                              {entry.meeting_title ||
+                                new Date(entry.meeting_date).toLocaleDateString("it-IT", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                })}
+                            </span>
+                            {explanations.length > 0 && (
+                              <div className="mt-1 space-y-0.5 pl-3 border-l border-border">
+                                {explanations.map((exp) => (
+                                  <p key={exp.id} className="text-xs text-muted-foreground">
+                                    Causa: {exp.reason}
+                                    {exp.delta_portion != null && (
+                                      <span>
+                                        {" "}
+                                        &mdash; {exp.delta_portion > 0 ? "+" : ""}
+                                        {exp.delta_portion.toLocaleString("it-IT")} ({exp.direction})
+                                      </span>
+                                    )}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm">
+                            {formatNumber(entry.current_value, kpi.unit)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm">
+                            {entry.delta != null ? (
+                              <span
+                                className={
+                                  entry.is_improved === true
+                                    ? "text-emerald-600"
+                                    : "text-red-600"
+                                }
+                              >
+                                {entry.delta > 0 ? "+" : ""}
+                                {entry.delta.toLocaleString("it-IT")}
+                                {entry.delta_percent != null && (
+                                  <span className="ml-1 text-xs">
+                                    ({entry.delta_percent > 0 ? "+" : ""}
+                                    {entry.delta_percent.toFixed(1)}%)
+                                  </span>
+                                )}
+                              </span>
+                            ) : (
+                              "\u2014"
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {entry.is_improved === true ? (
+                              <Badge variant="secondary" className="inline-flex items-center text-emerald-600 text-xs">
+                                <ArrowUp className="h-3 w-3 mr-0.5" />
+                                Migliorato
+                              </Badge>
+                            ) : entry.is_improved === false ? (
+                              <Badge variant="secondary" className="inline-flex items-center text-red-600 text-xs">
+                                <ArrowDown className="h-3 w-3 mr-0.5" />
+                                Peggiorato
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">\u2014</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ─── Lightweight KPI card for Section 3 (per-user stacked) ───────────────────
+
+function MiniKpiCard({
+  kpi,
+  expanded,
+  onToggle,
+}: {
+  kpi: {
+    id: string;
+    name: string;
+    description: string | null;
+    unit: string;
+    latest: any;
+    sparkValues: number[];
+  };
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const latest = kpi.latest;
+  const improved = latest?.is_improved === true;
+  const colorClass = improved ? "text-emerald-600" : "text-red-600";
+  const DeltaIcon = improved ? ArrowUp : ArrowDown;
+
+  return (
+    <div>
+      <Card
+        className="border border-border cursor-pointer hover:bg-muted/30 transition-colors"
+        onClick={onToggle}
+      >
+        <CardContent className="p-6">
+          <div className="flex items-start justify-between mb-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-muted-foreground truncate">
+                {kpi.name} ({kpi.unit})
+              </p>
+              {latest ? (
+                <p className="text-2xl font-bold text-foreground mt-1">
+                  {formatNumber(latest.current_value, kpi.unit)}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground mt-1">Nessun dato</p>
+              )}
+            </div>
+            {kpi.sparkValues.length > 1 && (
+              <div className="text-muted-foreground shrink-0 ml-3">
+                <Sparkline values={kpi.sparkValues} width={120} height={32} />
+              </div>
+            )}
+          </div>
+          {latest?.delta != null && (
+            <div className="flex items-center gap-2 mt-2">
+              <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${colorClass}`}>
+                <DeltaIcon className="h-3 w-3" />
+                {latest.delta > 0 ? "+" : ""}
+                {latest.delta.toLocaleString("it-IT")}
+                {latest.delta_percent != null && (
+                  <span className="ml-0.5">
+                    ({latest.delta_percent > 0 ? "+" : ""}
+                    {latest.delta_percent.toFixed(1)}%)
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {expanded && kpi.description && (
+        <Card className="border border-border mt-2">
+          <CardContent className="p-6">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+              Descrizione
+            </p>
+            <p className="text-sm text-foreground">{kpi.description}</p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ─── Section 1: I tuoi KPI (personal) ────────────────────────────────────────
+
+function PersonalKpiSection({ userId }: { userId: string }) {
+  const [expandedKpiId, setExpandedKpiId] = useState<string | null>(null);
+
+  const kpiDefs = useQuery({
+    queryKey: ["kpi-page-personal-defs", userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("kpi_definitions")
+        .select("id, name, description, unit, direction, target_value")
+        .eq("user_id", userId)
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as KpiDef[];
+    },
+  });
+
+  const kpiEntries = useQuery({
+    queryKey: ["kpi-page-personal-entries", kpiDefs.data?.map((k) => k.id)],
+    enabled: !!kpiDefs.data && kpiDefs.data.length > 0,
+    queryFn: async () => {
+      const kpiIds = kpiDefs.data!.map((k) => k.id);
+      const { data, error } = await supabase
+        .from("kpi_entries")
+        .select("id, kpi_id, current_value, previous_value, delta, delta_percent, is_improved, meeting_id, meetings(title, scheduled_date)")
+        .in("kpi_id", kpiIds)
+        .order("meetings(scheduled_date)", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((row: any) => ({
+        id: row.id,
+        kpi_id: row.kpi_id,
+        current_value: row.current_value,
+        previous_value: row.previous_value,
+        delta: row.delta,
+        delta_percent: row.delta_percent,
+        is_improved: row.is_improved,
+        meeting_id: row.meeting_id,
+        meeting_title: row.meetings?.title ?? "",
+        meeting_date: row.meetings?.scheduled_date ?? "",
+      })) as KpiEntryWithMeeting[];
+    },
+  });
+
+  const varianceExplanations = useQuery({
+    queryKey: ["kpi-page-personal-variances", kpiEntries.data?.map((e) => e.id)],
+    enabled: !!kpiEntries.data && kpiEntries.data.length > 0,
+    queryFn: async () => {
+      const entryIds = kpiEntries.data!.map((e) => e.id);
+      const { data, error } = await supabase
+        .from("kpi_variance_explanations")
+        .select("id, kpi_entry_id, reason, delta_portion, delta_portion_percent, direction")
+        .in("kpi_entry_id", entryIds);
+      if (error) throw error;
+      return (data ?? []) as VarianceExplanation[];
+    },
+  });
+
+  const entriesByKpi = useMemo(() => {
+    const map = new Map<string, KpiEntryWithMeeting[]>();
+    for (const entry of kpiEntries.data ?? []) {
+      const list = map.get(entry.kpi_id) ?? [];
+      list.push(entry);
+      map.set(entry.kpi_id, list);
+    }
+    for (const [, list] of map) {
+      list.sort((a, b) => b.meeting_date.localeCompare(a.meeting_date));
+    }
+    return map;
+  }, [kpiEntries.data]);
+
+  const varianceMap = useMemo(() => {
+    const map = new Map<string, VarianceExplanation[]>();
+    for (const v of varianceExplanations.data ?? []) {
+      const list = map.get(v.kpi_entry_id) ?? [];
+      list.push(v);
+      map.set(v.kpi_entry_id, list);
+    }
+    return map;
+  }, [varianceExplanations.data]);
+
+  const isLoading = kpiDefs.isLoading || kpiEntries.isLoading;
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-2 rounded-md bg-muted">
+          <TrendingUp className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <h2 className="text-lg font-semibold text-foreground">I tuoi KPI</h2>
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-40 w-full" />
+          ))}
+        </div>
+      ) : !kpiDefs.data?.length ? (
+        <Card className="border border-dashed border-border">
+          <CardContent className="p-6 text-center py-8">
+            <TrendingUp className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm font-medium text-foreground mb-1">
+              Nessun KPI assegnato
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Contatta l'amministratore per configurare i tuoi KPI.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {kpiDefs.data.map((kpi) => (
+            <KpiCard
+              key={kpi.id}
+              kpi={kpi}
+              entries={entriesByKpi.get(kpi.id) ?? []}
+              varianceMap={varianceMap}
+              expanded={expandedKpiId === kpi.id}
+              onToggle={() =>
+                setExpandedKpiId(expandedKpiId === kpi.id ? null : kpi.id)
+              }
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Section 2: KPI Aziendali (aggregate) ────────────────────────────────────
+
+function AggregateKpiSection({ tenantId }: { tenantId: string }) {
+  const aggregateKpis = useQuery({
+    queryKey: ["kpi-page-aggregate", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data: defs, error: defsErr } = await supabase
+        .from("kpi_definitions")
+        .select("id, name, unit")
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true);
+      if (defsErr) throw defsErr;
+      if (!defs?.length) return [];
+
+      const kpiIds = defs.map((d) => d.id);
+
+      const { data: entries, error: entriesErr } = await supabase
+        .from("kpi_entries")
+        .select("id, kpi_id, current_value, is_improved, meeting_id, meetings(scheduled_date)")
+        .in("kpi_id", kpiIds)
+        .order("meetings(scheduled_date)", { ascending: true });
+      if (entriesErr) throw entriesErr;
+
+      const defMap = new Map(defs.map((d) => [d.id, d]));
+      const byName = new Map<string, { unit: string; values: number[] }>();
+
+      for (const entry of entries ?? []) {
+        const def = defMap.get(entry.kpi_id);
+        if (!def) continue;
+        const existing = byName.get(def.name) ?? { unit: def.unit, values: [] };
+        existing.values.push(entry.current_value);
+        byName.set(def.name, existing);
+      }
+
+      const entriesByName = new Map<string, { date: string; values: number[] }[]>();
+      for (const entry of entries ?? []) {
+        const def = defMap.get(entry.kpi_id);
+        if (!def) continue;
+        const meetingDate = (entry as any).meetings?.scheduled_date ?? "";
+        const list = entriesByName.get(def.name) ?? [];
+        let bucket = list.find((b) => b.date === meetingDate);
+        if (!bucket) {
+          bucket = { date: meetingDate, values: [] };
+          list.push(bucket);
+        }
+        bucket.values.push(entry.current_value);
+        entriesByName.set(def.name, list);
+      }
+
+      const results: {
+        name: string;
+        unit: string;
+        avgValue: number;
+        sparklineValues: number[];
+        totalEntries: number;
+      }[] = [];
+
+      for (const [name, data] of byName) {
+        const allVals = data.values;
+        const avg = allVals.reduce((a, b) => a + b, 0) / allVals.length;
+
+        const dateBuckets = entriesByName.get(name) ?? [];
+        dateBuckets.sort((a, b) => a.date.localeCompare(b.date));
+        const sparklineValues = dateBuckets.map(
+          (b) => b.values.reduce((a, c) => a + c, 0) / b.values.length
+        );
+
+        results.push({
+          name,
+          unit: data.unit,
+          avgValue: avg,
+          sparklineValues: sparklineValues.slice(-12),
+          totalEntries: allVals.length,
+        });
+      }
+
+      return results.sort((a, b) => a.name.localeCompare(b.name));
+    },
+  });
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-2 rounded-md bg-muted">
+          <BarChart3 className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <h2 className="text-lg font-semibold text-foreground">KPI Aziendali</h2>
+      </div>
+
+      {aggregateKpis.isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-32 w-full" />
+          ))}
+        </div>
+      ) : !aggregateKpis.data?.length ? (
+        <Card className="border border-dashed border-border">
+          <CardContent className="p-6 text-center py-8">
+            <TrendingUp className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">Nessun KPI aziendale disponibile</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {aggregateKpis.data.map((kpi) => (
+            <Card key={kpi.name} className="border border-border">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-muted-foreground truncate">{kpi.name}</p>
+                    <p className="text-2xl font-bold text-foreground mt-1">
+                      {formatNumber(Math.round(kpi.avgValue * 100) / 100, kpi.unit)}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Media su {kpi.totalEntries} rilevazioni
+                    </p>
+                  </div>
+                  {kpi.sparklineValues.length > 1 && (
+                    <div className="text-muted-foreground shrink-0 ml-3">
+                      <Sparkline values={kpi.sparklineValues} width={120} height={32} />
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Section 3: KPI per Persona (all users stacked) ──────────────────────────
+
+function AllUsersKpiSection({ tenantId }: { tenantId: string }) {
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+
+  const allUsersKpis = useQuery({
+    queryKey: ["kpi-page-all-users", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data: defs, error: defsErr } = await supabase
+        .from("kpi_definitions")
+        .select("id, name, description, unit, direction, target_value, user_id, users(full_name)")
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .order("name");
+      if (defsErr) throw defsErr;
+      if (!defs?.length) return [];
+
+      const kpiIds = defs.map((d) => d.id);
+
+      const { data: entries, error: entriesErr } = await supabase
+        .from("kpi_entries")
+        .select("id, kpi_id, current_value, delta, delta_percent, is_improved, meeting_id, meetings(scheduled_date)")
+        .in("kpi_id", kpiIds)
+        .order("meetings(scheduled_date)", { ascending: false });
+      if (entriesErr) throw entriesErr;
+
+      const entriesByKpi = new Map<string, any[]>();
+      for (const e of entries ?? []) {
+        const list = entriesByKpi.get(e.kpi_id) ?? [];
+        list.push(e);
+        entriesByKpi.set(e.kpi_id, list);
+      }
+
+      const byUser = new Map<string, { userName: string; kpis: any[] }>();
+      for (const d of defs) {
+        const userId = d.user_id;
+        const userName = (d as any).users?.full_name ?? "Utente sconosciuto";
+        if (!byUser.has(userId)) {
+          byUser.set(userId, { userName, kpis: [] });
+        }
+        const kpiEntries = entriesByKpi.get(d.id) ?? [];
+        const latest = kpiEntries[0] ?? null;
+        const sparkValues = kpiEntries
+          .slice()
+          .reverse()
+          .slice(-12)
+          .map((e: any) => e.current_value);
+        byUser.get(userId)!.kpis.push({
+          id: d.id,
+          name: d.name,
+          description: d.description,
+          unit: d.unit,
+          latest,
+          sparkValues,
+        });
+      }
+
+      // Include users with no KPIs
+      const { data: allUsers } = await supabase
+        .from("users")
+        .select("id, full_name")
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .order("full_name");
+      for (const u of allUsers ?? []) {
+        if (!byUser.has(u.id)) {
+          byUser.set(u.id, { userName: u.full_name, kpis: [] });
+        }
+      }
+
+      return Array.from(byUser.entries())
+        .map(([userId, data]) => ({
+          userId,
+          userName: data.userName,
+          kpis: data.kpis,
+        }))
+        .sort((a, b) => a.userName.localeCompare(b.userName));
+    },
+  });
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-2 rounded-md bg-muted">
+          <Users className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <h2 className="text-lg font-semibold text-foreground">KPI per Persona</h2>
+      </div>
+
+      {allUsersKpis.isLoading ? (
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-32 w-full" />
+          ))}
+        </div>
+      ) : !allUsersKpis.data?.length ? (
+        <Card className="border border-dashed border-border">
+          <CardContent className="p-6 text-center py-8">
+            <TrendingUp className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">Nessun KPI disponibile</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-6">
+          {allUsersKpis.data.map((userGroup) => (
+            <div key={userGroup.userId}>
+              <h3 className="text-sm font-bold text-foreground mb-3">
+                {userGroup.userName}
+              </h3>
+              {userGroup.kpis.length === 0 ? (
+                <p className="text-xs text-muted-foreground ml-4">Nessun KPI</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {userGroup.kpis.map((kpi: any) => (
+                    <MiniKpiCard
+                      key={kpi.id}
+                      kpi={kpi}
+                      expanded={expandedCardId === kpi.id}
+                      onToggle={() =>
+                        setExpandedCardId(expandedCardId === kpi.id ? null : kpi.id)
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Section 4: Task in Ritardo ──────────────────────────────────────────────
+
+function OverdueTasksSection({ tenantId }: { tenantId: string }) {
+  const today = new Date().toISOString().split("T")[0];
+
+  const overdueTasks = useQuery({
+    queryKey: ["kpi-page-overdue", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("board_tasks")
+        .select("id, title, status, deadline_date, owner_user_id")
+        .eq("tenant_id", tenantId)
+        .neq("status", "done")
+        .lt("deadline_date", today)
+        .order("deadline_date", { ascending: true });
+      if (error) throw error;
+      if (!data?.length) return [];
+
+      const ownerIds = [...new Set(data.map((t) => t.owner_user_id))];
+      const { data: owners } = await supabase
+        .from("users")
+        .select("id, full_name")
+        .in("id", ownerIds);
+      const ownerMap = new Map(owners?.map((o) => [o.id, o.full_name]) ?? []);
+
+      return data
+        .map((t) => {
+          const deadlineDate = new Date(t.deadline_date);
+          const todayDate = new Date();
+          todayDate.setHours(0, 0, 0, 0);
+          deadlineDate.setHours(0, 0, 0, 0);
+          const daysOverdue = Math.floor(
+            (todayDate.getTime() - deadlineDate.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          return {
+            ...t,
+            owner_name: ownerMap.get(t.owner_user_id) ?? "\u2014",
+            days_overdue: daysOverdue,
+          };
+        })
+        .sort((a, b) => b.days_overdue - a.days_overdue);
+    },
+  });
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-2 rounded-md bg-muted">
+          <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <h2 className="text-lg font-semibold text-foreground">Task in Ritardo</h2>
+        {overdueTasks.data && overdueTasks.data.length > 0 && (
+          <Badge variant="destructive" className="inline-flex items-center text-xs">
+            {overdueTasks.data.length}
+          </Badge>
+        )}
+      </div>
+
+      {overdueTasks.isLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full" />
+          ))}
+        </div>
+      ) : !overdueTasks.data?.length ? (
+        <Card className="border border-border">
+          <CardContent className="p-6 text-center py-8">
+            <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-3" />
+            <p className="text-sm font-medium text-foreground">Nessun task in ritardo</p>
+            <p className="text-xs text-muted-foreground mt-1">Tutti i task sono nei tempi previsti</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border border-border">
+          <CardContent className="p-6">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="py-3 px-4">Titolo</TableHead>
+                    <TableHead className="py-3 px-4">Owner</TableHead>
+                    <TableHead className="py-3 px-4">Scadenza</TableHead>
+                    <TableHead className="py-3 px-4 text-center">Giorni di Ritardo</TableHead>
+                    <TableHead className="py-3 px-4">Stato</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {overdueTasks.data.map((task) => {
+                    const status = taskStatusConfig[task.status] ?? {
+                      label: task.status,
+                      colorClass: "bg-gray-100 text-gray-700",
+                      dotClass: "bg-muted-foreground",
+                    };
+                    return (
+                      <TableRow key={task.id}>
+                        <TableCell className="py-3 px-4">
+                          <span className="text-sm font-medium text-foreground">{task.title}</span>
+                        </TableCell>
+                        <TableCell className="py-3 px-4">
+                          <span className="text-sm text-muted-foreground">{task.owner_name}</span>
+                        </TableCell>
+                        <TableCell className="py-3 px-4">
+                          <span className="text-sm text-muted-foreground font-mono">
+                            {new Date(task.deadline_date).toLocaleDateString("it-IT", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </span>
+                        </TableCell>
+                        <TableCell className="py-3 px-4 text-center">
+                          <Badge
+                            variant="destructive"
+                            className="inline-flex items-center text-xs font-mono"
+                          >
+                            {task.days_overdue}g
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="py-3 px-4">
+                          <Badge
+                            variant="secondary"
+                            className={`inline-flex items-center gap-1.5 text-xs ${status.colorClass}`}
+                          >
+                            <StatusDot className={status.dotClass} />
+                            {status.label}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
+
+export default function KpiPage() {
+  const { user } = useAuth();
+  const tenantId = user?.tenant_id;
+  const userId = user?.id;
+  const isAdmin = user?.role === "org_admin" || user?.role === "information_officer";
+  const isDirigente = user?.role === "dirigente";
+
+  return (
+    <div className="space-y-section-gap">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-semibold text-foreground">KPI</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Panoramica dei tuoi KPI personali e aziendali
+        </p>
+      </div>
+
+      {/* Section 1: Personal KPIs (always shown) */}
+      {userId && <PersonalKpiSection userId={userId} />}
+
+      {/* Section 2: Aggregate KPIs */}
+      {tenantId && <AggregateKpiSection tenantId={tenantId} />}
+
+      {/* Section 3: KPI per Persona (org_admin / IO only) */}
+      {tenantId && isAdmin && <AllUsersKpiSection tenantId={tenantId} />}
+
+      {/* Section 4: Overdue tasks (org_admin / IO only) */}
+      {tenantId && isAdmin && <OverdueTasksSection tenantId={tenantId} />}
+    </div>
+  );
+}
