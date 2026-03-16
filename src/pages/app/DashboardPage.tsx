@@ -512,14 +512,14 @@ export default function DashboardPage() {
         <Card className="border border-border">
           <CardContent className="p-6">
             <div className="flex items-center gap-2 mb-3">
-              <div className="p-2 rounded-md bg-muted">
-                <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              <div className="p-2 rounded-md bg-destructive/10">
+                <CalendarDays className="h-4 w-4 text-destructive" />
               </div>
             </div>
             {nextMeeting.isLoading ? (
               <Skeleton className="h-8 w-24 mb-1" />
             ) : meeting ? (
-              <p className="text-3xl font-semibold font-mono text-foreground">
+              <p className="text-3xl font-semibold font-mono text-destructive">
                 {daysUntil(meeting.scheduled_date) >= 0
                   ? daysUntil(meeting.scheduled_date)
                   : 0}
