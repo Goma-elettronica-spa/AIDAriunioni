@@ -63,7 +63,8 @@ export default function Login() {
   const [orgName, setOrgName] = useState("");
   const [orgVat, setOrgVat] = useState("");
   const [joinVat, setJoinVat] = useState("");
-  const [foundTenant, setFoundTenant] = useState<{ id: string; name: string } | null>(null);
+  const [foundTenants, setFoundTenants] = useState<{ id: string; name: string; vat_number: string }[]>([]);
+  const [selectedTenant, setSelectedTenant] = useState<{ id: string; name: string; vat_number: string } | null>(null);
   const [tenantSearchDone, setTenantSearchDone] = useState(false);
 
   // Common state
@@ -141,7 +142,8 @@ export default function Login() {
     setSuccessMessage("");
     if (newView === "register") {
       setRegStep(1);
-      setFoundTenant(null);
+      setFoundTenants([]);
+      setSelectedTenant(null);
       setTenantSearchDone(false);
     }
   }
@@ -158,7 +160,8 @@ export default function Login() {
     setOrgName("");
     setOrgVat("");
     setJoinVat("");
-    setFoundTenant(null);
+    setFoundTenants([]);
+    setSelectedTenant(null);
     setTenantSearchDone(false);
   }
 
@@ -243,15 +246,15 @@ export default function Login() {
     setRegStep(2);
   };
 
-  // ---- Search tenant by VAT ----
+  // ---- Search tenant by VAT or name ----
   const handleSearchTenant = async () => {
     setError(null);
-    setFoundTenant(null);
+    setFoundTenants([]);
+    setSelectedTenant(null);
     setTenantSearchDone(false);
     setLoading(true);
 
-    const { data: rpcData, error: searchError } = await supabase.rpc("search_tenant_by_vat", { p_vat: joinVat.trim() });
-    const data = rpcData && rpcData.length > 0 ? rpcData[0] : null;
+    const { data: rpcData, error: searchError } = await supabase.rpc("search_tenant_by_vat", { p_query: joinVat.trim() });
 
     setLoading(false);
     setTenantSearchDone(true);
@@ -261,9 +264,7 @@ export default function Login() {
       return;
     }
 
-    if (data) {
-      setFoundTenant(data);
-    }
+    setFoundTenants(rpcData || []);
   };
 
   // ---- Create new org registration ----
@@ -295,42 +296,19 @@ export default function Login() {
       return;
     }
 
-    // 2. Create tenant
-    const slug = orgName
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "");
-
-    const { data: tenantData, error: tenantError } = await supabase
-      .from("tenants")
-      .insert({
-        name: orgName.trim(),
-        slug,
-        vat_number: orgVat.trim(),
-      })
-      .select("id")
-      .single();
-
-    if (tenantError) {
-      setLoading(false);
-      setError("Errore nella creazione dell'organizzazione: " + tenantError.message);
-      return;
-    }
-
-    // 3. Create user profile
-    const { error: profileError } = await supabase.from("users").insert({
-      id: userId,
-      email: regEmail.trim().toLowerCase(),
-      full_name: regFullName.trim(),
-      role: "org_admin",
-      tenant_id: tenantData.id,
+    // 2. Create tenant and user profile via RPC
+    const { data: result, error: rpcError } = await supabase.rpc("register_with_new_tenant", {
+      p_user_id: userId,
+      p_email: regEmail.trim(),
+      p_full_name: regFullName.trim(),
+      p_tenant_name: orgName.trim(),
+      p_vat_number: orgVat.trim(),
     });
 
     setLoading(false);
 
-    if (profileError) {
-      setError("Errore nella creazione del profilo: " + profileError.message);
+    if (rpcError) {
+      setError("Errore nella creazione dell'organizzazione: " + rpcError.message);
       return;
     }
 
@@ -341,7 +319,7 @@ export default function Login() {
 
   // ---- Join existing org registration ----
   const handleJoinOrgRegister = async () => {
-    if (!foundTenant) return;
+    if (!selectedTenant) return;
     setError(null);
     setSuccess(false);
     setLoading(true);
@@ -368,57 +346,29 @@ export default function Login() {
       return;
     }
 
-    // 2. Check if the email was pre-invited (exists in users table for this tenant)
-    const { data: existingUser } = await supabase
-      .from("users")
-      .select("id, role, tenant_id")
-      .eq("email", regEmail.trim().toLowerCase())
-      .eq("tenant_id", foundTenant.id)
-      .maybeSingle();
-
-    if (existingUser) {
-      // Auto-approve: update the pre-provisioned user record with the real auth id
-      const { error: updateError } = await supabase
-        .from("users")
-        .update({
-          id: userId,
-          full_name: regFullName.trim(),
-        })
-        .eq("id", existingUser.id);
-
-      setLoading(false);
-
-      if (updateError) {
-        setError("Errore nell'aggiornamento del profilo: " + updateError.message);
-        return;
-      }
-
-      setSuccess(true);
-      setSuccessMessage("Account attivato! Controlla la tua email per confermare e accedere.");
-      resetRegister();
-      return;
-    }
-
-    // 3. No pre-invitation: create a join request
-    const { error: joinError } = await supabase.from("join_requests").insert({
-      user_auth_id: userId,
-      email: regEmail.trim().toLowerCase(),
-      full_name: regFullName.trim(),
-      tenant_id: foundTenant.id,
-      status: "pending",
+    // 2. Register and join tenant via RPC
+    const { data: result, error: joinRpcError } = await supabase.rpc("register_and_join_tenant", {
+      p_user_id: userId,
+      p_email: regEmail.trim(),
+      p_full_name: regFullName.trim(),
+      p_tenant_id: selectedTenant.id,
     });
 
     setLoading(false);
 
-    if (joinError) {
-      setError("Errore nell'invio della richiesta: " + joinError.message);
+    if (joinRpcError) {
+      setError("Errore nell'invio della richiesta: " + joinRpcError.message);
       return;
     }
 
     setSuccess(true);
-    setSuccessMessage(
-      "Richiesta inviata! L'amministratore della tua organizzazione approvera' il tuo accesso. Controlla la tua email per confermare la registrazione."
-    );
+    if (result?.status === "auto_approved") {
+      setSuccessMessage("Accesso approvato! Effettua il login.");
+    } else if (result?.status === "pending") {
+      setSuccessMessage("Richiesta inviata! L'amministratore della tua organizzazione approvera' il tuo accesso.");
+    } else {
+      setSuccessMessage("Registrazione completata! Controlla la tua email per confermare.");
+    }
     resetRegister();
   };
 
@@ -663,7 +613,8 @@ export default function Login() {
                 onValueChange={(val) => {
                   setOrgChoice(val as "create" | "join");
                   setError(null);
-                  setFoundTenant(null);
+                  setFoundTenants([]);
+                  setSelectedTenant(null);
                   setTenantSearchDone(false);
                 }}
                 className="space-y-3"
@@ -729,7 +680,7 @@ export default function Login() {
               {orgChoice === "join" && (
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="join-vat">P.IVA dell'organizzazione</Label>
+                    <Label htmlFor="join-vat">Cerca per nome o P.IVA</Label>
                     <div className="flex gap-2">
                       <Input
                         id="join-vat"
@@ -738,7 +689,8 @@ export default function Login() {
                         value={joinVat}
                         onChange={(e) => {
                           setJoinVat(e.target.value);
-                          setFoundTenant(null);
+                          setFoundTenants([]);
+                          setSelectedTenant(null);
                           setTenantSearchDone(false);
                         }}
                         disabled={loading}
@@ -761,28 +713,44 @@ export default function Login() {
                     </div>
                   </div>
 
-                  {tenantSearchDone && !foundTenant && (
+                  {tenantSearchDone && foundTenants.length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-2">
-                      Nessuna organizzazione trovata con questa P.IVA
+                      Nessuna organizzazione trovata
                     </p>
                   )}
 
-                  {foundTenant && (
-                    <div className="rounded-md border border-border p-3 space-y-3">
-                      <p className="text-sm font-medium">{foundTenant.name}</p>
-                      <Button
-                        type="button"
-                        className="w-full h-10"
-                        onClick={handleJoinOrgRegister}
-                        disabled={loading}
-                      >
-                        {loading ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          "Richiedi Accesso"
-                        )}
-                      </Button>
+                  {foundTenants.length > 0 && (
+                    <div className="space-y-2">
+                      {foundTenants.map((tenant) => (
+                        <div
+                          key={tenant.id}
+                          onClick={() => setSelectedTenant(tenant)}
+                          className={`rounded-md border p-3 cursor-pointer transition-colors ${
+                            selectedTenant?.id === tenant.id
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/50"
+                          }`}
+                        >
+                          <p className="text-sm font-medium">{tenant.name}</p>
+                          <p className="text-xs text-muted-foreground">P.IVA: {tenant.vat_number}</p>
+                        </div>
+                      ))}
                     </div>
+                  )}
+
+                  {selectedTenant && (
+                    <Button
+                      type="button"
+                      className="w-full h-10"
+                      onClick={handleJoinOrgRegister}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "Richiedi Accesso"
+                      )}
+                    </Button>
                   )}
                 </div>
               )}

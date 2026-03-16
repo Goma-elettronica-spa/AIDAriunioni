@@ -109,6 +109,7 @@ export default function SuperadminDashboard() {
   const [slug, setSlug] = useState("");
   const [slugManual, setSlugManual] = useState(false);
   const [plan, setPlan] = useState("free");
+  const [vatNumber, setVatNumber] = useState("");
 
   useEffect(() => {
     if (!slugManual) setSlug(slugify(name));
@@ -131,6 +132,7 @@ export default function SuperadminDashboard() {
       setSlug("");
       setSlugManual(false);
       setPlan("free");
+      setVatNumber("");
       toast({ title: "Tenant creato con successo" });
     },
     onError: (err: Error) => {
@@ -205,6 +207,7 @@ export default function SuperadminDashboard() {
                 <TableRow className="bg-muted/50">
                   <TableHead>Nome</TableHead>
                   <TableHead>Slug</TableHead>
+                  <TableHead>P.IVA</TableHead>
                   <TableHead>Piano</TableHead>
                   <TableHead>Creato il</TableHead>
                 </TableRow>
@@ -300,7 +303,7 @@ export default function SuperadminDashboard() {
               </Button>
               <Button
                 type="submit"
-                disabled={createTenant.isPending || !name.trim() || !slug.trim()}
+                disabled={createTenant.isPending || !name.trim() || !slug.trim() || !vatNumber.trim()}
               >
                 {createTenant.isPending ? "Creazione…" : "Crea Tenant"}
               </Button>
