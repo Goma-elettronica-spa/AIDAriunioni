@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { UserPlus, Pencil, Power, Check, X } from "lucide-react";
+import { UserPlus, Pencil, Power, Check, X, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,6 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
+import KpiManagementSheet from "@/components/team/KpiManagementSheet";
 
 type UserRow = {
   id: string;
@@ -81,6 +82,9 @@ export default function TeamPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editRole, setEditRole] = useState("");
 
+  // KPI sheet
+  const [kpiUser, setKpiUser] = useState<{ id: string; name: string } | null>(null);
+
   const users = useQuery({
     queryKey: ["team-users", tenantId],
     enabled: !!tenantId,
@@ -92,6 +96,25 @@ export default function TeamPage() {
         .order("full_name", { ascending: true });
       if (error) throw error;
       return data as UserRow[];
+    },
+  });
+
+  // Fetch KPI counts per user
+  const kpiCounts = useQuery({
+    queryKey: ["kpi-counts", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("kpi_definitions")
+        .select("user_id")
+        .eq("tenant_id", tenantId!)
+        .eq("is_active", true);
+      if (error) throw error;
+      const counts: Record<string, number> = {};
+      for (const row of data ?? []) {
+        counts[row.user_id] = (counts[row.user_id] || 0) + 1;
+      }
+      return counts;
     },
   });
 
@@ -246,6 +269,7 @@ export default function TeamPage() {
   };
 
   const pendingRequests = joinRequests.data ?? [];
+  const kpiCountMap = kpiCounts.data ?? {};
 
   return (
     <div className="space-y-section-gap">
@@ -353,8 +377,9 @@ export default function TeamPage() {
                 <TableHead>Email</TableHead>
                 <TableHead>Ruolo</TableHead>
                 <TableHead className="hidden md:table-cell">Job Title</TableHead>
+                <TableHead>KPI</TableHead>
                 <TableHead>Stato</TableHead>
-                <TableHead className="w-24">Azioni</TableHead>
+                <TableHead className="w-28">Azioni</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -363,6 +388,7 @@ export default function TeamPage() {
                   label: u.role,
                   variant: "secondary" as const,
                 };
+                const userKpiCount = kpiCountMap[u.id] ?? 0;
                 return (
                   <TableRow key={u.id} className="hover:bg-muted/30 transition-colors">
                     <TableCell className="font-medium">{u.full_name}</TableCell>
@@ -370,7 +396,7 @@ export default function TeamPage() {
                       {u.email}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={rc.variant} className="text-xs">
+                      <Badge variant={rc.variant} className="inline-flex items-center text-xs">
                         {rc.label}
                       </Badge>
                     </TableCell>
@@ -378,10 +404,24 @@ export default function TeamPage() {
                       {u.job_title ?? "\u2014"}
                     </TableCell>
                     <TableCell>
+                      <Badge variant="outline" className="inline-flex items-center text-xs">
+                        {userKpiCount}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
                       <StatusDot active={u.is_active} />
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setKpiUser({ id: u.id, name: u.full_name })}
+                          title="Gestisci KPI"
+                        >
+                          <BarChart3 className="h-3.5 w-3.5" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -561,6 +601,15 @@ export default function TeamPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* KPI Management Sheet */}
+      <KpiManagementSheet
+        open={!!kpiUser}
+        onOpenChange={(open) => !open && setKpiUser(null)}
+        userId={kpiUser?.id ?? ""}
+        userName={kpiUser?.name ?? ""}
+        tenantId={tenantId!}
+      />
     </div>
   );
 }
