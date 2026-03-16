@@ -17,6 +17,7 @@ import Tenants from "@/pages/superadmin/Tenants";
 import AppLayout from "@/layouts/AppLayout";
 import DashboardPage from "@/pages/app/DashboardPage";
 import MeetingsPage from "@/pages/app/MeetingsPage";
+import PreMeetingPage from "@/pages/app/PreMeetingPage";
 import BoardPage from "@/pages/app/BoardPage";
 import TeamPage from "@/pages/app/TeamPage";
 import AuditLogPage from "@/pages/app/AuditLogPage";
