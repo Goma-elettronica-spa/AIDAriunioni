@@ -22,6 +22,7 @@ import MeetingDetailPage from "@/pages/app/MeetingDetailPage";
 import BoardPage from "@/pages/app/BoardPage";
 import TeamPage from "@/pages/app/TeamPage";
 import AuditLogPage from "@/pages/app/AuditLogPage";
+import BriefPage from "@/pages/app/BriefPage";
 
 const queryClient = new QueryClient();
 
