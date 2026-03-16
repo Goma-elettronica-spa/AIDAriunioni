@@ -841,18 +841,18 @@ Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
         </DndContext>
       )}
 
-      {/* Create Dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Nuova Richiesta di Upgrade</DialogTitle>
-          </DialogHeader>
+      {/* Create Sheet */}
+      <Sheet open={createOpen} onOpenChange={setCreateOpen}>
+        <SheetContent className="overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>New Upgrade</SheetTitle>
+          </SheetHeader>
           <form
             onSubmit={(e) => {
               e.preventDefault();
               createMutation.mutate();
             }}
-            className="space-y-4"
+            className="space-y-4 mt-6"
           >
             {/* Titolo */}
             <div className="space-y-2">
@@ -970,16 +970,18 @@ Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
               />
             </div>
 
-            <DialogFooter>
+            <div className="flex gap-2 pt-2">
               <Button
                 type="button"
                 variant="outline"
+                className="flex-1"
                 onClick={() => setCreateOpen(false)}
               >
                 Annulla
               </Button>
               <Button
                 type="submit"
+                className="flex-1"
                 disabled={
                   createMutation.isPending ||
                   !newTitle.trim() ||
@@ -989,10 +991,10 @@ Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
               >
                 {createMutation.isPending ? "Creazione..." : "Crea Richiesta"}
               </Button>
-            </DialogFooter>
+            </div>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       {/* Detail Sheet (right side) */}
       <Sheet
