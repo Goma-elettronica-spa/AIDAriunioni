@@ -605,6 +605,35 @@ export default function UpgradePage() {
     },
   });
 
+  // Delete upgrade request mutation
+  const deleteUpgradeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase.from as any)("upgrade_requests")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["upgrade-requests"] });
+      if (selectedCard) {
+        writeAuditLog({
+          tenantId: tenantId!,
+          userId: user!.id,
+          action: "delete",
+          entityType: "upgrade_request",
+          entityId: selectedCard.id,
+          oldValues: { title: selectedCard.title },
+        });
+      }
+      setSelectedCard(null);
+      setDeleteConfirmOpen(false);
+      toast({ title: "Richiesta eliminata" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
   // ---------- DnD ----------
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
