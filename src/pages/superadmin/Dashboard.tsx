@@ -121,6 +121,7 @@ export default function SuperadminDashboard() {
         name: name.trim(),
         slug: slug.trim(),
         plan,
+        vat_number: "",
       });
       if (error) throw error;
     },
