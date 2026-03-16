@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  ArrowLeft, ChevronRight, Loader2, Sparkles, Pencil,
+  ArrowLeft, ChevronRight, Loader2, Sparkles, Pencil, FileUp,
   Check, X, AlertTriangle, FileText, ListTodo, BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -292,6 +292,17 @@ export default function MeetingDetailPage() {
               >
                 <Sparkles className="h-3.5 w-3.5 mr-1.5" />
                 Claudietto generami i task
+              </Button>
+            )}
+            
+            {isAdmin && isFuture && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate(`/meetings/${m.id}/pre-meeting`)}
+              >
+                <FileUp className="h-3.5 w-3.5 mr-1.5" />
+                Compila i tuoi dati
               </Button>
             )}
             {isAdmin && nextStatus && (
