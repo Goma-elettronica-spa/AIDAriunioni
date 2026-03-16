@@ -18,6 +18,7 @@ import AppLayout from "@/layouts/AppLayout";
 import DashboardPage from "@/pages/app/DashboardPage";
 import MeetingsPage from "@/pages/app/MeetingsPage";
 import PreMeetingPage from "@/pages/app/PreMeetingPage";
+import MeetingDetailPage from "@/pages/app/MeetingDetailPage";
 import BoardPage from "@/pages/app/BoardPage";
 import TeamPage from "@/pages/app/TeamPage";
 import AuditLogPage from "@/pages/app/AuditLogPage";
@@ -63,6 +64,7 @@ const App = () => (
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/meetings" element={<MeetingsPage />} />
               <Route path="/meetings/:id/pre-meeting" element={<PreMeetingPage />} />
+              <Route path="/meetings/:id" element={<MeetingDetailPage />} />
               <Route path="/board" element={<BoardPage />} />
               <Route
                 path="/team"
