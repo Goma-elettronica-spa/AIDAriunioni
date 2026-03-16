@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -24,7 +25,7 @@ import {
   ArrowUp,
   ArrowDown,
   Pencil,
-  Trash2,
+  EyeOff,
   Plus,
   X,
 } from "lucide-react";
@@ -44,6 +45,7 @@ type KpiRow = {
   direction: string;
   target_value: number | null;
   is_active: boolean;
+  is_required: boolean;
   user_id: string;
   tenant_id: string;
   created_at: string;
@@ -55,6 +57,7 @@ type KpiFormData = {
   unit: string;
   direction: string;
   target_value: string;
+  is_required: boolean;
 };
 
 const emptyForm: KpiFormData = {
@@ -62,6 +65,7 @@ const emptyForm: KpiFormData = {
   unit: "",
   direction: "up_is_good",
   target_value: "",
+  is_required: true,
 };
 
 function formatTarget(value: number | null, unit: string): string {
@@ -108,6 +112,7 @@ export default function KpiManagementSheet({
         unit: form.unit.trim(),
         direction: form.direction,
         target_value: form.target_value.trim() ? Number(form.target_value) : null,
+        is_required: form.is_required,
         user_id: userId,
         tenant_id: tenantId,
       });
@@ -115,6 +120,7 @@ export default function KpiManagementSheet({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["kpi-definitions", userId, tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
       setShowCreateForm(false);
       setCreateForm(emptyForm);
@@ -134,12 +140,14 @@ export default function KpiManagementSheet({
           unit: form.unit.trim(),
           direction: form.direction,
           target_value: form.target_value.trim() ? Number(form.target_value) : null,
+          is_required: form.is_required,
         })
         .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["kpi-definitions", userId, tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
       setEditingId(null);
       toast({ title: "KPI aggiornato" });
@@ -151,6 +159,7 @@ export default function KpiManagementSheet({
 
   const deactivateMutation = useMutation({
     mutationFn: async (id: string) => {
+      // NEVER delete - only set is_active=false to preserve historical data
       const { error } = await supabase
         .from("kpi_definitions")
         .update({ is_active: false })
@@ -159,9 +168,34 @@ export default function KpiManagementSheet({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["kpi-definitions", userId, tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
       setConfirmDeactivateId(null);
-      toast({ title: "KPI disattivato" });
+      toast({
+        title: "KPI disattivato",
+        description: "I dati storici saranno preservati",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const toggleRequiredMutation = useMutation({
+    mutationFn: async ({ id, is_required }: { id: string; is_required: boolean }) => {
+      const { error } = await supabase
+        .from("kpi_definitions")
+        .update({ is_required: !is_required })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", userId, tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
+      const kpi = activeKpis.find((k) => k.id === variables.id);
+      toast({
+        title: `KPI ${kpi?.name ?? ""} ora e' ${!variables.is_required ? "obbligatorio" : "opzionale"}`,
+      });
     },
     onError: (err: Error) => {
       toast({ title: "Errore", description: err.message, variant: "destructive" });
@@ -175,6 +209,7 @@ export default function KpiManagementSheet({
       unit: kpi.unit,
       direction: kpi.direction,
       target_value: kpi.target_value != null ? String(kpi.target_value) : "",
+      is_required: kpi.is_required ?? true,
     });
   };
 
@@ -229,70 +264,93 @@ export default function KpiManagementSheet({
             ) : (
               <div
                 key={kpi.id}
-                className="border border-border rounded-lg p-6 flex items-center justify-between gap-3"
+                className="border border-border rounded-lg p-6 space-y-3"
               >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm truncate">{kpi.name}</span>
-                      <Badge variant="outline" className="inline-flex items-center text-xs shrink-0">
-                        {kpi.unit}
-                      </Badge>
-                      {kpi.direction === "up_is_good" ? (
-                        <ArrowUp className="h-4 w-4 text-green-600 shrink-0" />
-                      ) : (
-                        <ArrowDown className="h-4 w-4 text-green-600 shrink-0" />
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm truncate">{kpi.name}</span>
+                        <Badge variant="outline" className="inline-flex items-center text-xs shrink-0">
+                          {kpi.unit}
+                        </Badge>
+                        {kpi.direction === "up_is_good" ? (
+                          <ArrowUp className="h-4 w-4 text-green-600 shrink-0" />
+                        ) : (
+                          <ArrowDown className="h-4 w-4 text-green-600 shrink-0" />
+                        )}
+                        <Badge
+                          variant={kpi.is_required ? "default" : "secondary"}
+                          className="inline-flex items-center text-xs shrink-0"
+                        >
+                          {kpi.is_required ? "Obbligatorio" : "Opzionale"}
+                        </Badge>
+                      </div>
+                      {kpi.target_value != null && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {formatTarget(kpi.target_value, kpi.unit)}
+                        </p>
                       )}
                     </div>
-                    {kpi.target_value != null && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formatTarget(kpi.target_value, kpi.unit)}
-                      </p>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    {confirmDeactivateId === kpi.id ? (
+                      <>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={() => deactivateMutation.mutate(kpi.id)}
+                          disabled={deactivateMutation.isPending}
+                        >
+                          Conferma
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={() => setConfirmDeactivateId(null)}
+                        >
+                          Annulla
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => startEdit(kpi)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setConfirmDeactivateId(kpi.id)}
+                          title="Disattiva KPI (i dati storici saranno preservati)"
+                        >
+                          <EyeOff className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1 shrink-0">
-                  {confirmDeactivateId === kpi.id ? (
-                    <>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="h-8 text-xs"
-                        onClick={() => deactivateMutation.mutate(kpi.id)}
-                        disabled={deactivateMutation.isPending}
-                      >
-                        Conferma
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 text-xs"
-                        onClick={() => setConfirmDeactivateId(null)}
-                      >
-                        Annulla
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => startEdit(kpi)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setConfirmDeactivateId(kpi.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                      </Button>
-                    </>
-                  )}
+                {/* is_required toggle inline */}
+                <div className="flex items-center gap-2 pt-1 border-t border-border/50">
+                  <Label className="text-xs text-muted-foreground">Obbligatorio nel pre-meeting:</Label>
+                  <Switch
+                    checked={kpi.is_required ?? true}
+                    onCheckedChange={() =>
+                      toggleRequiredMutation.mutate({
+                        id: kpi.id,
+                        is_required: kpi.is_required ?? true,
+                      })
+                    }
+                  />
                 </div>
               </div>
             )
@@ -392,6 +450,16 @@ function KpiForm({
           onChange={(e) => onChange({ ...form, target_value: e.target.value })}
           placeholder="Es. 1000000"
         />
+      </div>
+      <div className="flex items-center gap-2">
+        <Switch
+          id="kpi-required"
+          checked={form.is_required}
+          onCheckedChange={(checked) => onChange({ ...form, is_required: checked })}
+        />
+        <Label htmlFor="kpi-required" className="text-sm">
+          Obbligatorio nel pre-meeting
+        </Label>
       </div>
       <div className="flex items-center gap-2 pt-2">
         <Button type="submit" disabled={isPending || !form.name.trim() || !form.unit.trim()}>

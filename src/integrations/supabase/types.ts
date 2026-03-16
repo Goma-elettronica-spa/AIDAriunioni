@@ -502,6 +502,7 @@ export type Database = {
           direction: string
           id: string
           is_active: boolean
+          is_required: boolean
           name: string
           target_value: number | null
           tenant_id: string
@@ -514,6 +515,7 @@ export type Database = {
           direction?: string
           id?: string
           is_active?: boolean
+          is_required?: boolean
           name: string
           target_value?: number | null
           tenant_id: string
@@ -526,6 +528,7 @@ export type Database = {
           direction?: string
           id?: string
           is_active?: boolean
+          is_required?: boolean
           name?: string
           target_value?: number | null
           tenant_id?: string

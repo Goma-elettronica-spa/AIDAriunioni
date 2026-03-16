@@ -2,18 +2,24 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { UserPlus, Pencil, Power, Check, X, BarChart3 } from "lucide-react";
+import { UserPlus, Pencil, Power, Check, X, BarChart3, ChevronDown, ChevronRight, Plus, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -27,6 +33,27 @@ type UserRow = {
   role: string;
   job_title: string | null;
   is_active: boolean;
+};
+
+type KpiDef = {
+  id: string;
+  name: string;
+  unit: string;
+  direction: string;
+  target_value: number | null;
+  is_active: boolean;
+  is_required: boolean;
+  user_id: string;
+  tenant_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type KpiEntry = {
+  id: string;
+  kpi_id: string;
+  current_value: number;
+  created_at: string;
 };
 
 type JoinRequest = {
@@ -60,6 +87,109 @@ function StatusDot({ active }: { active: boolean }) {
   );
 }
 
+function InlineKpiValue({
+  entry,
+  kpiId,
+  canEdit,
+  tenantId,
+  userId,
+}: {
+  entry: KpiEntry | undefined;
+  kpiId: string;
+  canEdit: boolean;
+  tenantId: string;
+  userId: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(entry?.current_value != null ? String(entry.current_value) : "");
+  const queryClient = useQueryClient();
+
+  const saveMutation = useMutation({
+    mutationFn: async (newValue: number) => {
+      if (entry?.id) {
+        const { error } = await supabase
+          .from("kpi_entries")
+          .update({ current_value: newValue })
+          .eq("id", entry.id);
+        if (error) throw error;
+      } else {
+        // Find latest meeting for this tenant to associate the entry
+        const { data: latestMeeting } = await supabase
+          .from("meetings")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .order("date", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (!latestMeeting) throw new Error("Nessun meeting trovato");
+
+        const { error } = await supabase.from("kpi_entries").insert({
+          kpi_id: kpiId,
+          meeting_id: latestMeeting.id,
+          user_id: userId,
+          tenant_id: tenantId,
+          current_value: newValue,
+        });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpi-latest-entries"] });
+      setEditing(false);
+      toast({ title: "Valore KPI aggiornato" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleSave = () => {
+    const num = parseFloat(value);
+    if (!isNaN(num)) {
+      saveMutation.mutate(num);
+    } else {
+      setEditing(false);
+    }
+  };
+
+  if (editing && canEdit) {
+    return (
+      <Input
+        type="number"
+        step="any"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={handleSave}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") handleSave();
+          if (e.key === "Escape") setEditing(false);
+        }}
+        className="h-8 w-28 text-sm"
+        autoFocus
+      />
+    );
+  }
+
+  const displayValue = entry?.current_value != null
+    ? new Intl.NumberFormat("it-IT").format(entry.current_value)
+    : "\u2014";
+
+  return (
+    <span
+      className={canEdit ? "cursor-pointer hover:underline text-sm font-mono" : "text-sm font-mono"}
+      onClick={() => {
+        if (canEdit) {
+          setValue(entry?.current_value != null ? String(entry.current_value) : "");
+          setEditing(true);
+        }
+      }}
+    >
+      {displayValue}
+    </span>
+  );
+}
+
 export default function TeamPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -67,6 +197,11 @@ export default function TeamPage() {
 
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
+  const [showHiddenKpis, setShowHiddenKpis] = useState(false);
+
+  // Confirm dialog for deactivating KPI
+  const [confirmHideKpi, setConfirmHideKpi] = useState<{ id: string; name: string } | null>(null);
 
   // Invite dialog
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -85,6 +220,8 @@ export default function TeamPage() {
   // KPI sheet
   const [kpiUser, setKpiUser] = useState<{ id: string; name: string } | null>(null);
 
+  const isAdmin = user?.role === "org_admin" || user?.role === "information_officer";
+
   const users = useQuery({
     queryKey: ["team-users", tenantId],
     enabled: !!tenantId,
@@ -99,22 +236,41 @@ export default function TeamPage() {
     },
   });
 
-  // Fetch KPI counts per user
-  const kpiCounts = useQuery({
-    queryKey: ["kpi-counts", tenantId],
+  // Fetch ALL kpi_definitions for the tenant
+  const allKpis = useQuery({
+    queryKey: ["kpi-all-definitions", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("kpi_definitions")
-        .select("user_id")
+        .select("*")
         .eq("tenant_id", tenantId!)
-        .eq("is_active", true);
+        .order("created_at", { ascending: true });
       if (error) throw error;
-      const counts: Record<string, number> = {};
+      return data as KpiDef[];
+    },
+  });
+
+  // Fetch latest kpi_entry for each KPI definition
+  const latestEntries = useQuery({
+    queryKey: ["kpi-latest-entries", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      // Get all entries ordered by created_at desc, then deduplicate client-side
+      const { data, error } = await supabase
+        .from("kpi_entries")
+        .select("id, kpi_id, current_value, created_at")
+        .eq("tenant_id", tenantId!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      // Keep only the latest entry per kpi_id
+      const map = new Map<string, KpiEntry>();
       for (const row of data ?? []) {
-        counts[row.user_id] = (counts[row.user_id] || 0) + 1;
+        if (!map.has(row.kpi_id)) {
+          map.set(row.kpi_id, row as KpiEntry);
+        }
       }
-      return counts;
+      return map;
     },
   });
 
@@ -134,6 +290,27 @@ export default function TeamPage() {
     },
   });
 
+  // Group KPIs by user_id
+  const kpisByUser = useMemo(() => {
+    const map: Record<string, KpiDef[]> = {};
+    for (const kpi of allKpis.data ?? []) {
+      if (!map[kpi.user_id]) map[kpi.user_id] = [];
+      map[kpi.user_id].push(kpi);
+    }
+    return map;
+  }, [allKpis.data]);
+
+  // KPI counts (active only)
+  const kpiCountMap = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const kpi of allKpis.data ?? []) {
+      if (kpi.is_active) {
+        counts[kpi.user_id] = (counts[kpi.user_id] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [allKpis.data]);
+
   const filtered = useMemo(() => {
     if (!users.data) return [];
     return users.data.filter((u) => {
@@ -143,6 +320,15 @@ export default function TeamPage() {
       return true;
     });
   }, [users.data, roleFilter, statusFilter]);
+
+  const toggleExpanded = (userId: string) => {
+    setExpandedUsers((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  };
 
   const inviteMutation = useMutation({
     mutationFn: async () => {
@@ -212,17 +398,57 @@ export default function TeamPage() {
     },
   });
 
+  // Toggle is_required on a KPI definition
+  const toggleRequiredMutation = useMutation({
+    mutationFn: async ({ id, is_required }: { id: string; is_required: boolean }) => {
+      const { error } = await supabase
+        .from("kpi_definitions")
+        .update({ is_required: !is_required })
+        .eq("id", id);
+      if (error) throw error;
+      return !is_required;
+    },
+    onSuccess: (_newVal, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
+      const kpi = allKpis.data?.find((k) => k.id === variables.id);
+      toast({
+        title: `KPI ${kpi?.name ?? ""} ora e' ${!variables.is_required ? "obbligatorio" : "opzionale"}`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
+  // Toggle is_active on a KPI definition
+  const toggleKpiActiveMutation = useMutation({
+    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const { error } = await supabase
+        .from("kpi_definitions")
+        .update({ is_active: !is_active })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-counts"] });
+      setConfirmHideKpi(null);
+      toast({ title: "Visibilita' KPI aggiornata" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
   // Approve join request
   const approveMutation = useMutation({
     mutationFn: async (request: JoinRequest) => {
-      // 1. Update join_request status to approved
       const { error: updateError } = await supabase
         .from("join_requests")
         .update({ status: "approved" })
         .eq("id", request.id);
       if (updateError) throw updateError;
 
-      // 2. Create user record in users table
       const { error: userError } = await supabase.from("users").insert({
         id: request.user_id,
         email: request.email,
@@ -269,7 +495,13 @@ export default function TeamPage() {
   };
 
   const pendingRequests = joinRequests.data ?? [];
-  const kpiCountMap = kpiCounts.data ?? {};
+  const entryMap = latestEntries.data ?? new Map<string, KpiEntry>();
+
+  const canEditKpiValue = (targetUserId: string) => {
+    if (isAdmin) return true;
+    if (user?.role === "dirigente" && user?.id === targetUserId) return true;
+    return false;
+  };
 
   return (
     <div className="space-y-section-gap">
@@ -333,7 +565,7 @@ export default function TeamPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Select value={roleFilter} onValueChange={setRoleFilter}>
           <SelectTrigger className="w-44">
             <SelectValue placeholder="Ruolo" />
@@ -355,9 +587,20 @@ export default function TeamPage() {
             <SelectItem value="inactive">Inattivi</SelectItem>
           </SelectContent>
         </Select>
+
+        <div className="flex items-center gap-2 ml-auto">
+          <Checkbox
+            id="show-hidden-kpis"
+            checked={showHiddenKpis}
+            onCheckedChange={(checked) => setShowHiddenKpis(checked === true)}
+          />
+          <Label htmlFor="show-hidden-kpis" className="text-sm text-muted-foreground cursor-pointer">
+            Mostra KPI nascosti
+          </Label>
+        </div>
       </div>
 
-      {/* Table */}
+      {/* Accordion-style user list */}
       {users.isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -373,8 +616,8 @@ export default function TeamPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
+                <TableHead className="w-8"></TableHead>
                 <TableHead>Nome</TableHead>
-                <TableHead>Email</TableHead>
                 <TableHead>Ruolo</TableHead>
                 <TableHead className="hidden md:table-cell">Job Title</TableHead>
                 <TableHead>KPI</TableHead>
@@ -389,77 +632,234 @@ export default function TeamPage() {
                   variant: "secondary" as const,
                 };
                 const userKpiCount = kpiCountMap[u.id] ?? 0;
+                const isExpanded = expandedUsers.has(u.id);
+                const userKpis = kpisByUser[u.id] ?? [];
+                const visibleKpis = showHiddenKpis
+                  ? userKpis
+                  : userKpis.filter((k) => k.is_active);
+
                 return (
-                  <TableRow key={u.id} className="hover:bg-muted/30 transition-colors">
-                    <TableCell className="font-medium">{u.full_name}</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {u.email}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={rc.variant} className="inline-flex items-center text-xs">
-                        {rc.label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                      {u.job_title ?? "\u2014"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="inline-flex items-center text-xs">
-                        {userKpiCount}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <StatusDot active={u.is_active} />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => setKpiUser({ id: u.id, name: u.full_name })}
-                          title="Gestisci KPI"
-                        >
-                          <BarChart3 className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => openEdit(u)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() =>
-                            toggleActive.mutate({
-                              id: u.id,
-                              is_active: u.is_active,
-                            })
-                          }
-                          disabled={u.id === user?.id}
-                        >
-                          <Power
-                            className="h-3.5 w-3.5"
-                            style={{
-                              color: u.is_active
-                                ? "hsl(var(--status-stuck))"
-                                : "hsl(var(--status-done))",
-                            }}
-                          />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                  <>
+                    <TableRow
+                      key={u.id}
+                      className="hover:bg-muted/30 transition-colors cursor-pointer"
+                      onClick={() => toggleExpanded(u.id)}
+                    >
+                      <TableCell className="w-8 px-3">
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </TableCell>
+                      <TableCell className="font-medium">{u.full_name}</TableCell>
+                      <TableCell>
+                        <Badge variant={rc.variant} className="inline-flex items-center text-xs">
+                          {rc.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                        {u.job_title ?? "\u2014"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="inline-flex items-center text-xs">
+                          {userKpiCount}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <StatusDot active={u.is_active} />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setKpiUser({ id: u.id, name: u.full_name })}
+                            title="Gestisci KPI"
+                          >
+                            <BarChart3 className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => openEdit(u)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() =>
+                              toggleActive.mutate({
+                                id: u.id,
+                                is_active: u.is_active,
+                              })
+                            }
+                            disabled={u.id === user?.id}
+                          >
+                            <Power
+                              className="h-3.5 w-3.5"
+                              style={{
+                                color: u.is_active
+                                  ? "hsl(var(--status-stuck))"
+                                  : "hsl(var(--status-done))",
+                              }}
+                            />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+
+                    {/* Expanded KPI section */}
+                    {isExpanded && (
+                      <TableRow key={`${u.id}-kpis`}>
+                        <TableCell colSpan={7} className="p-0 bg-muted/20">
+                          <div className="p-6">
+                            {visibleKpis.length === 0 ? (
+                              <p className="text-sm text-muted-foreground text-center py-4">
+                                Nessun KPI {showHiddenKpis ? "" : "attivo "}per questo utente.
+                              </p>
+                            ) : (
+                              <div className="border border-border rounded-lg overflow-hidden">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow className="bg-muted/30">
+                                      <TableHead className="text-xs">KPI Nome</TableHead>
+                                      <TableHead className="text-xs">Unita'</TableHead>
+                                      <TableHead className="text-xs">Valore Attuale</TableHead>
+                                      <TableHead className="text-xs">Obbligatorio</TableHead>
+                                      <TableHead className="text-xs">Visibile</TableHead>
+                                      <TableHead className="text-xs w-16">Azioni</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {visibleKpis.map((kpi) => (
+                                      <TableRow
+                                        key={kpi.id}
+                                        className={!kpi.is_active ? "opacity-50" : ""}
+                                      >
+                                        <TableCell className="text-sm font-medium">
+                                          <div className="flex items-center gap-2">
+                                            {kpi.name}
+                                            {!kpi.is_active && (
+                                              <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                                            )}
+                                          </div>
+                                        </TableCell>
+                                        <TableCell>
+                                          <Badge variant="outline" className="inline-flex items-center text-xs">
+                                            {kpi.unit}
+                                          </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                          <InlineKpiValue
+                                            entry={entryMap.get(kpi.id)}
+                                            kpiId={kpi.id}
+                                            canEdit={canEditKpiValue(u.id)}
+                                            tenantId={tenantId!}
+                                            userId={u.id}
+                                          />
+                                        </TableCell>
+                                        <TableCell>
+                                          <div className="flex items-center gap-2">
+                                            <Switch
+                                              checked={kpi.is_required ?? true}
+                                              onCheckedChange={() =>
+                                                toggleRequiredMutation.mutate({
+                                                  id: kpi.id,
+                                                  is_required: kpi.is_required ?? true,
+                                                })
+                                              }
+                                              disabled={!isAdmin}
+                                            />
+                                          </div>
+                                        </TableCell>
+                                        <TableCell>
+                                          <div className="flex items-center gap-2">
+                                            <Switch
+                                              checked={kpi.is_active}
+                                              onCheckedChange={(checked) => {
+                                                if (!checked) {
+                                                  setConfirmHideKpi({ id: kpi.id, name: kpi.name });
+                                                } else {
+                                                  toggleKpiActiveMutation.mutate({
+                                                    id: kpi.id,
+                                                    is_active: kpi.is_active,
+                                                  });
+                                                }
+                                              }}
+                                              disabled={!isAdmin}
+                                            />
+                                          </div>
+                                        </TableCell>
+                                        <TableCell>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8"
+                                            onClick={() => setKpiUser({ id: u.id, name: u.full_name })}
+                                          >
+                                            <Pencil className="h-3.5 w-3.5" />
+                                          </Button>
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            )}
+                            {isAdmin && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="mt-3"
+                                onClick={() => setKpiUser({ id: u.id, name: u.full_name })}
+                              >
+                                <Plus className="h-3.5 w-3.5 mr-1" />
+                                Aggiungi KPI
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </>
                 );
               })}
             </TableBody>
           </Table>
         </div>
       )}
+
+      {/* Confirm hide KPI dialog */}
+      <AlertDialog open={!!confirmHideKpi} onOpenChange={(open) => !open && setConfirmHideKpi(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Nascondere {confirmHideKpi?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              I dati storici saranno preservati. Il KPI non sara' visibile nelle viste ma potra' essere riattivato in qualsiasi momento.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (confirmHideKpi) {
+                  toggleKpiActiveMutation.mutate({
+                    id: confirmHideKpi.id,
+                    is_active: true,
+                  });
+                }
+              }}
+            >
+              Nascondi
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Invite Dialog */}
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>

@@ -31,6 +31,7 @@ interface KpiState {
   unit: string;
   direction: string;
   targetValue: number | null;
+  isRequired: boolean;
   currentValue: string;
   previousValue: number | null;
   entryId: string | null;
@@ -44,13 +45,13 @@ export function KpiSection({
   const [loaded, setLoaded] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
-  // Fetch KPI definitions
+  // Fetch KPI definitions: only is_active=true
   const definitions = useQuery({
     queryKey: ["kpi-defs", userId, tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("kpi_definitions")
-        .select("id, name, unit, direction, target_value")
+        .select("id, name, unit, direction, target_value, is_required")
         .eq("user_id", userId)
         .eq("tenant_id", tenantId)
         .eq("is_active", true)
@@ -130,6 +131,7 @@ export function KpiSection({
           unit: d.unit,
           direction: d.direction,
           targetValue: d.target_value,
+          isRequired: d.is_required ?? true,
           currentValue: existing ? String(existing.current_value) : "",
           previousValue: prevMap.get(d.id) ?? null,
           entryId: existing?.id ?? null,
@@ -240,11 +242,12 @@ export function KpiSection({
     });
   };
 
-  // Track completion
+  // Track completion: only required KPIs must be filled for form to be complete
   useEffect(() => {
     if (!kpis.length) return;
-    const allFilled = kpis.every((k) => k.currentValue.trim() !== "");
-    onComplete(allFilled);
+    const requiredKpis = kpis.filter((k) => k.isRequired);
+    const allRequiredFilled = requiredKpis.every((k) => k.currentValue.trim() !== "");
+    onComplete(allRequiredFilled);
   }, [kpis, onComplete]);
 
   if (definitions.isLoading) return <Skeleton className="h-40 w-full" />;
@@ -286,7 +289,12 @@ export function KpiSection({
             <div key={kpi.kpiId} className="space-y-3">
               <div className="flex items-center gap-2">
                 <Label className="font-medium">{kpi.name}</Label>
-                <Badge variant="outline" className="text-[10px]">{kpi.unit}</Badge>
+                <Badge variant="outline" className="inline-flex items-center text-[10px]">{kpi.unit}</Badge>
+                {!kpi.isRequired && (
+                  <Badge variant="secondary" className="inline-flex items-center text-[10px]">
+                    (opzionale)
+                  </Badge>
+                )}
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -304,7 +312,7 @@ export function KpiSection({
                 <div>
                   <Label className="text-xs text-muted-foreground">Mese prec.</Label>
                   <p className="mt-1 h-10 flex items-center text-sm font-mono text-muted-foreground">
-                    {kpi.previousValue !== null ? kpi.previousValue : "—"}
+                    {kpi.previousValue !== null ? kpi.previousValue : "\u2014"}
                   </p>
                 </div>
                 {delta !== null && (
@@ -340,7 +348,7 @@ export function KpiSection({
                       >
                         {kpi.previousValue && kpi.previousValue !== 0
                           ? `${((delta / kpi.previousValue) * 100).toFixed(1)}%`
-                          : "—"}
+                          : "\u2014"}
                       </p>
                     </div>
                   </>
@@ -350,7 +358,7 @@ export function KpiSection({
               {/* Variance explanations */}
               {showVariance && (
                 <div className="ml-4 pl-4 border-l-2 border-border space-y-2">
-                  <Label className="text-xs text-muted-foreground">Perché?</Label>
+                  <Label className="text-xs text-muted-foreground">Perch&eacute;?</Label>
                   {kpi.variances.map((v, vi) => (
                     <div key={vi} className="flex items-center gap-2">
                       <Input
@@ -401,7 +409,7 @@ export function KpiSection({
                     const diff = Math.abs(sum - Math.abs(delta));
                     return diff > 0.5 ? (
                       <p className="text-xs" style={{ color: "hsl(var(--status-waiting))" }}>
-                        ⚠ La somma delle porzioni ({sum.toFixed(1)}) non corrisponde al delta ({Math.abs(delta).toFixed(1)})
+                        La somma delle porzioni ({sum.toFixed(1)}) non corrisponde al delta ({Math.abs(delta).toFixed(1)})
                       </p>
                     ) : null;
                   })()}
