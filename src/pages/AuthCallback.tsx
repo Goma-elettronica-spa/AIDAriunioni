@@ -13,83 +13,16 @@ export default function AuthCallback() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === "SIGNED_IN" && session) {
-          // Fetch user profile
-          let { data: profile } = await supabase
-            .from("users")
-            .select("id, role, tenant_id, full_name")
-            .eq("id", session.user.id)
-            .maybeSingle();
-
-          // Try reconciliation by email if not found by id
-          if (!profile && session.user.email) {
-            const { data: emailProfile } = await supabase
-              .from("users")
-              .select("id, role, tenant_id, full_name")
-              .eq("email", session.user.email.toLowerCase())
-              .maybeSingle();
-
-            if (emailProfile && emailProfile.id !== session.user.id) {
-              const { error: updateError } = await supabase
-                .from("users")
-                .update({ id: session.user.id })
-                .eq("id", emailProfile.id);
-
-              if (!updateError) {
-                profile = { ...emailProfile, id: session.user.id };
-              }
-            } else if (emailProfile) {
-              profile = emailProfile;
-            }
-          }
-
-          // If we have a profile with tenant_id, redirect by role
-          if (profile && profile.tenant_id) {
-            if (profile.role === "superadmin") {
-              navigate("/superadmin/dashboard", { replace: true });
-            } else {
-              navigate("/dashboard", { replace: true });
-            }
-            return;
-          }
-
-          // Profile exists but no tenant_id - check for pending join requests
-          if (profile && !profile.tenant_id) {
-            const { data: joinReq } = await supabase
-              .from("join_requests")
-              .select("id, status")
-              .eq("user_id", session.user.id)
-              .eq("status", "pending")
-              .maybeSingle();
-
-            if (joinReq) {
-              setStatusMessage("La tua richiesta di accesso e' in attesa di approvazione.");
-            } else {
-              setStatusMessage("Il tuo account e' in attesa di assegnazione a un'organizzazione.");
-            }
-            return;
-          }
-
-          // No profile at all - check for pending join requests by auth id
-          if (!profile) {
-            const { data: joinReq } = await supabase
-              .from("join_requests")
-              .select("id, status")
-              .eq("user_id", session.user.id)
-              .eq("status", "pending")
-              .maybeSingle();
-
-            if (joinReq) {
-              setStatusMessage("La tua richiesta di accesso e' in attesa di approvazione.");
-            } else {
-              setStatusMessage("Il tuo account e' in attesa di assegnazione a un'organizzazione.");
-            }
-            return;
+          try {
+            await handlePostAuth(session);
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : "Errore sconosciuto";
+            setError("Errore durante la configurazione dell'account: " + msg);
           }
         }
       }
     );
 
-    // Fallback timeout in case no auth event fires
     const timeout = setTimeout(() => {
       setError("Sessione non valida. Riprova il login.");
     }, 10000);
@@ -99,6 +32,133 @@ export default function AuthCallback() {
       clearTimeout(timeout);
     };
   }, [navigate]);
+
+  const handlePostAuth = async (session: { user: { id: string; email?: string; user_metadata?: Record<string, unknown> } }) => {
+    const userId = session.user.id;
+    const email = session.user.email?.toLowerCase() || "";
+    const meta = session.user.user_metadata || {};
+    const registrationType = meta.registration_type as string | undefined;
+
+    // 1. Check if user profile already exists
+    let { data: profile } = await supabase
+      .from("users")
+      .select("id, role, tenant_id, full_name")
+      .eq("id", userId)
+      .maybeSingle();
+
+    // Try reconciliation by email if not found by id
+    if (!profile && email) {
+      const { data: emailProfile } = await supabase
+        .from("users")
+        .select("id, role, tenant_id, full_name")
+        .eq("email", email)
+        .maybeSingle();
+
+      if (emailProfile && emailProfile.id !== userId) {
+        const { error: updateError } = await supabase
+          .from("users")
+          .update({ id: userId })
+          .eq("id", emailProfile.id);
+
+        if (!updateError) {
+          profile = { ...emailProfile, id: userId };
+        }
+      } else if (emailProfile) {
+        profile = emailProfile;
+      }
+    }
+
+    // 2. If profile already has tenant, redirect directly
+    if (profile && profile.tenant_id) {
+      if (profile.role === "superadmin") {
+        navigate("/superadmin/dashboard", { replace: true });
+      } else {
+        navigate("/dashboard", { replace: true });
+      }
+      return;
+    }
+
+    // 3. If no profile yet and we have registration metadata, handle it now
+    if (!profile && registrationType === "create_org") {
+      const fullName = (meta.full_name as string) || "";
+      const tenantName = (meta.tenant_name as string) || "";
+      const vatNumber = (meta.vat_number as string) || "";
+
+      const { error: rpcError } = await supabase.rpc("register_with_new_tenant", {
+        p_user_id: userId,
+        p_email: email,
+        p_full_name: fullName,
+        p_tenant_name: tenantName,
+        p_vat_number: vatNumber,
+      });
+
+      if (rpcError) {
+        setError("Errore nella creazione dell'organizzazione: " + rpcError.message);
+        return;
+      }
+
+      navigate("/dashboard", { replace: true });
+      return;
+    }
+
+    if (!profile && registrationType === "join_org") {
+      const fullName = (meta.full_name as string) || "";
+      const tenantId = (meta.tenant_id as string) || "";
+
+      const { data: result, error: rpcError } = await supabase.rpc("register_and_join_tenant", {
+        p_user_id: userId,
+        p_email: email,
+        p_full_name: fullName,
+        p_tenant_id: tenantId,
+      });
+
+      if (rpcError) {
+        setError("Errore nell'invio della richiesta: " + rpcError.message);
+        return;
+      }
+
+      const resultObj = result as Record<string, unknown> | null;
+      if (resultObj?.status === "auto_approved") {
+        navigate("/dashboard", { replace: true });
+      } else {
+        setStatusMessage("Richiesta inviata! L'amministratore della tua organizzazione approvera' il tuo accesso.");
+      }
+      return;
+    }
+
+    // 4. Profile exists but no tenant_id — check for pending join requests
+    if (profile && !profile.tenant_id) {
+      const { data: joinReq } = await supabase
+        .from("join_requests")
+        .select("id, status")
+        .eq("user_id", userId)
+        .eq("status", "pending")
+        .maybeSingle();
+
+      if (joinReq) {
+        setStatusMessage("La tua richiesta di accesso e' in attesa di approvazione.");
+      } else {
+        setStatusMessage("Il tuo account e' in attesa di assegnazione a un'organizzazione.");
+      }
+      return;
+    }
+
+    // 5. No profile, no metadata — generic waiting message
+    if (!profile) {
+      const { data: joinReq } = await supabase
+        .from("join_requests")
+        .select("id, status")
+        .eq("user_id", userId)
+        .eq("status", "pending")
+        .maybeSingle();
+
+      if (joinReq) {
+        setStatusMessage("La tua richiesta di accesso e' in attesa di approvazione.");
+      } else {
+        setStatusMessage("Il tuo account e' in attesa di assegnazione a un'organizzazione.");
+      }
+    }
+  };
 
   if (statusMessage) {
     return (
