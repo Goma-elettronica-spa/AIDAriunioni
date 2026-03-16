@@ -4,27 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { writeAuditLog } from "@/lib/audit";
-import {
-  Plus,
-  Pencil,
-  Trash2,
-  ChevronDown,
-  ChevronRight,
-  X,
-  UserPlus,
-} from "lucide-react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Plus, Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -66,234 +52,6 @@ type TenantUser = {
   board_role_id: string | null;
   is_active: boolean;
 };
-
-// ─── Role Row ───────────────────────────────────────────────────────────────
-
-function RoleRow({
-  role,
-  assignedUser,
-  allUsers,
-  onAssign,
-  onUnassign,
-  onEdit,
-  onDelete,
-}: {
-  role: BoardRole;
-  assignedUser: TenantUser | null;
-  allUsers: TenantUser[];
-  onAssign: (roleId: string, userId: string) => void;
-  onUnassign: (userId: string) => void;
-  onEdit: (role: BoardRole) => void;
-  onDelete: (role: BoardRole) => void;
-}) {
-  const [assigning, setAssigning] = useState(false);
-
-  return (
-    <div className="flex items-center py-3 border-b last:border-b-0 gap-3">
-      {/* Role info */}
-      <div className="flex items-center flex-1 min-w-0 gap-3">
-        <span className="text-sm font-semibold text-foreground whitespace-nowrap">
-          {role.name}
-        </span>
-        {role.description && (
-          <span className="text-sm text-muted-foreground truncate max-w-[240px]">
-            {role.description}
-          </span>
-        )}
-      </div>
-
-      {/* Assignment */}
-      <div className="flex items-center gap-2 shrink-0">
-        {assignedUser ? (
-          <div className="flex items-center gap-1.5">
-            <Badge variant="secondary" className="inline-flex items-center gap-1 text-xs">
-              <span>{assignedUser.full_name}</span>
-              {assignedUser.job_title && (
-                <span className="text-muted-foreground">
-                  &middot; {assignedUser.job_title}
-                </span>
-              )}
-            </Badge>
-            <button
-              type="button"
-              className="rounded-full p-0.5 hover:bg-muted"
-              onClick={() => onUnassign(assignedUser.id)}
-              title="Rimuovi assegnazione"
-            >
-              <X className="h-3 w-3 text-muted-foreground" />
-            </button>
-          </div>
-        ) : assigning ? (
-          <Select
-            onValueChange={(val) => {
-              if (val && val !== "__cancel__") {
-                onAssign(role.id, val);
-              }
-              setAssigning(false);
-            }}
-          >
-            <SelectTrigger className="w-48 h-8 text-sm">
-              <SelectValue placeholder="Seleziona persona..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__cancel__">Annulla</SelectItem>
-              {allUsers
-                .filter((u) => !u.board_role_id)
-                .map((u) => (
-                  <SelectItem key={u.id} value={u.id}>
-                    {u.full_name}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <div className="flex items-center gap-2">
-            <span className="text-sm italic text-muted-foreground">(non assegnato)</span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-1 h-7 px-2 text-xs"
-              onClick={() => setAssigning(true)}
-            >
-              <UserPlus className="h-3 w-3" />
-              Assegna
-            </Button>
-          </div>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-1 shrink-0">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={() => onEdit(role)}
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-red-600 hover:text-red-700"
-          onClick={() => onDelete(role)}
-          disabled={!!assignedUser}
-          title={assignedUser ? "Rimuovi prima l'assegnazione" : "Elimina ruolo"}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Area Card ──────────────────────────────────────────────────────────────
-
-function AreaCard({
-  area,
-  roles,
-  userByRoleId,
-  allUsers,
-  onAssign,
-  onUnassign,
-  onEditRole,
-  onDeleteRole,
-  onEditArea,
-  onDeleteArea,
-}: {
-  area: { id: string | null; name: string; description: string | null };
-  roles: BoardRole[];
-  userByRoleId: Map<string, TenantUser>;
-  allUsers: TenantUser[];
-  onAssign: (roleId: string, userId: string) => void;
-  onUnassign: (userId: string) => void;
-  onEditRole: (role: BoardRole) => void;
-  onDeleteRole: (role: BoardRole) => void;
-  onEditArea?: (area: FunctionalArea) => void;
-  onDeleteArea?: (areaId: string) => void;
-}) {
-  const [open, setOpen] = useState(true);
-
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <Card className="border border-border">
-        <CardHeader className="p-6">
-          <CollapsibleTrigger asChild>
-            <div className="flex items-center cursor-pointer select-none gap-3">
-              <div className="flex items-center shrink-0">
-                {open ? (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                )}
-              </div>
-              <div className="flex items-center flex-1 min-w-0 gap-3">
-                <span className="text-base font-bold text-foreground">{area.name}</span>
-                {area.description && (
-                  <span className="text-sm text-muted-foreground truncate">
-                    {area.description}
-                  </span>
-                )}
-                <Badge variant="secondary" className="inline-flex items-center text-xs shrink-0">
-                  {roles.length} {roles.length === 1 ? "ruolo" : "ruoli"}
-                </Badge>
-              </div>
-              {area.id && onEditArea && onDeleteArea && (
-                <div
-                  className="flex items-center gap-1 shrink-0"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => onEditArea(area as FunctionalArea)}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-red-600 hover:text-red-700"
-                    onClick={() => onDeleteArea(area.id!)}
-                    disabled={roles.length > 0}
-                    title={roles.length > 0 ? "Rimuovi prima i ruoli" : "Elimina area"}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              )}
-            </div>
-          </CollapsibleTrigger>
-        </CardHeader>
-        <CollapsibleContent>
-          <CardContent className="p-6 pt-0">
-            {roles.length === 0 ? (
-              <p className="text-sm italic text-muted-foreground py-2">
-                Nessun ruolo in quest'area
-              </p>
-            ) : (
-              <div>
-                {roles.map((role) => (
-                  <RoleRow
-                    key={role.id}
-                    role={role}
-                    assignedUser={userByRoleId.get(role.id) ?? null}
-                    allUsers={allUsers}
-                    onAssign={onAssign}
-                    onUnassign={onUnassign}
-                    onEdit={onEditRole}
-                    onDelete={onDeleteRole}
-                  />
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </CollapsibleContent>
-      </Card>
-    </Collapsible>
-  );
-}
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
@@ -367,12 +125,16 @@ export default function BoardRolesPage() {
 
   // ── Derived data ──────────────────────────────────────────────────────────
 
+  const areaMap = useMemo(() => {
+    const map = new Map<string, FunctionalArea>();
+    for (const a of areas) map.set(a.id, a);
+    return map;
+  }, [areas]);
+
   const userByRoleId = useMemo(() => {
     const map = new Map<string, TenantUser>();
     for (const u of users) {
-      if (u.board_role_id) {
-        map.set(u.board_role_id, u);
-      }
+      if (u.board_role_id) map.set(u.board_role_id, u);
     }
     return map;
   }, [users]);
@@ -391,6 +153,22 @@ export default function BoardRolesPage() {
     () => users.filter((u) => !u.board_role_id),
     [users],
   );
+
+  // Build ordered rows: grouped by area, then "Senza Area" at end
+  const tableRows = useMemo(() => {
+    const rows: { role: BoardRole; areaName: string; showArea: boolean }[] = [];
+    for (const area of areas) {
+      const areaRoles = rolesByArea.get(area.id) ?? [];
+      areaRoles.forEach((role, idx) => {
+        rows.push({ role, areaName: area.name, showArea: idx === 0 });
+      });
+    }
+    const noAreaRoles = rolesByArea.get(null) ?? [];
+    noAreaRoles.forEach((role, idx) => {
+      rows.push({ role, areaName: "Senza Area", showArea: idx === 0 });
+    });
+    return rows;
+  }, [areas, rolesByArea]);
 
   // ── Mutations ─────────────────────────────────────────────────────────────
 
@@ -619,39 +397,26 @@ export default function BoardRolesPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Organigramma</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Struttura organizzativa e ruoli
-          </p>
         </div>
-        <div className="space-y-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-32 w-full rounded-lg" />
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-8 w-full rounded" />
           ))}
         </div>
       </div>
     );
   }
 
-  // ── Empty state ───────────────────────────────────────────────────────────
-
-  const noAreas = areas.length === 0;
-  const noRoles = roles.length === 0;
-
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Organigramma</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Struttura organizzativa e ruoli
-          </p>
-        </div>
+        <h1 className="text-2xl font-semibold text-foreground">Organigramma</h1>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -673,90 +438,172 @@ export default function BoardRolesPage() {
         </div>
       </div>
 
-      {/* Empty state */}
-      {noAreas && noRoles && (
-        <Card className="border border-border">
-          <CardContent className="p-6">
-            <p className="text-sm text-muted-foreground text-center py-8">
-              Nessuna area creata. Inizia configurando le aree funzionali.
-            </p>
-          </CardContent>
-        </Card>
-      )}
+      {/* Table */}
+      {tableRows.length === 0 ? (
+        <div className="rounded-md border border-border p-6">
+          <p className="text-sm text-muted-foreground text-center">
+            Nessun ruolo o area creata. Inizia configurando le aree funzionali e i ruoli.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-md border border-border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50">
+                <th className="text-left font-medium text-muted-foreground py-2 px-4 w-[18%]">Area Funzionale</th>
+                <th className="text-left font-medium text-muted-foreground py-2 px-4 w-[18%]">Ruolo</th>
+                <th className="text-left font-medium text-muted-foreground py-2 px-4 w-[22%]">Persona Assegnata</th>
+                <th className="text-left font-medium text-muted-foreground py-2 px-4 w-[18%]">Job Title</th>
+                <th className="text-right font-medium text-muted-foreground py-2 px-4 w-[24%]">Azioni</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tableRows.map((row) => {
+                const assignedUser = userByRoleId.get(row.role.id) ?? null;
+                const area = row.role.functional_area_id ? areaMap.get(row.role.functional_area_id) : null;
 
-      {/* Area cards */}
-      {areas.map((area) => {
-        const areaRoles = rolesByArea.get(area.id) ?? [];
-        return (
-          <AreaCard
-            key={area.id}
-            area={area}
-            roles={areaRoles}
-            userByRoleId={userByRoleId}
-            allUsers={users}
-            onAssign={handleAssign}
-            onUnassign={handleUnassign}
-            onEditRole={openEditRole}
-            onDeleteRole={handleDeleteRole}
-            onEditArea={openEditArea}
-            onDeleteArea={(id) => deleteAreaMutation.mutate(id)}
-          />
-        );
-      })}
+                return (
+                  <tr key={row.role.id} className="border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors">
+                    {/* Area */}
+                    <td className="py-2 px-4 align-middle">
+                      {row.showArea ? (
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-foreground text-[0.9rem]">{row.areaName}</span>
+                          {area && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                className="rounded p-0.5 hover:bg-muted"
+                                onClick={() => openEditArea(area)}
+                                title="Modifica area"
+                              >
+                                <Pencil className="h-3 w-3 text-muted-foreground" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+                    </td>
 
-      {/* Senza Area section */}
-      {(rolesByArea.get(null) ?? []).length > 0 && (
-        <AreaCard
-          area={{ id: null, name: "Senza Area", description: "Ruoli non assegnati a nessuna area funzionale" }}
-          roles={rolesByArea.get(null) ?? []}
-          userByRoleId={userByRoleId}
-          allUsers={users}
-          onAssign={handleAssign}
-          onUnassign={handleUnassign}
-          onEditRole={openEditRole}
-          onDeleteRole={handleDeleteRole}
-        />
+                    {/* Role */}
+                    <td className="py-2 px-4 align-middle">
+                      <span className="font-medium text-foreground">{row.role.name}</span>
+                    </td>
+
+                    {/* Persona Assegnata */}
+                    <td className="py-2 px-4 align-middle">
+                      {assignedUser ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-foreground">{assignedUser.full_name}</span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">&mdash;</span>
+                      )}
+                    </td>
+
+                    {/* Job Title */}
+                    <td className="py-2 px-4 align-middle">
+                      {assignedUser?.job_title ? (
+                        <span className="text-muted-foreground">{assignedUser.job_title}</span>
+                      ) : (
+                        <span className="text-muted-foreground">&mdash;</span>
+                      )}
+                    </td>
+
+                    {/* Azioni */}
+                    <td className="py-2 px-4 align-middle">
+                      <div className="flex items-center justify-end gap-2">
+                        {/* Assign / reassign dropdown */}
+                        <Select
+                          value=""
+                          onValueChange={(val) => {
+                            if (val && val !== "__cancel__") {
+                              handleAssign(row.role.id, val);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="w-40 h-7 text-xs">
+                            <SelectValue placeholder={assignedUser ? "Riassegna..." : "Assegna..."} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__cancel__">Annulla</SelectItem>
+                            {users
+                              .filter((u) => !u.board_role_id || u.id === assignedUser?.id)
+                              .filter((u) => u.id !== assignedUser?.id)
+                              .map((u) => (
+                                <SelectItem key={u.id} value={u.id}>
+                                  {u.full_name}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+
+                        {/* Edit role */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => openEditRole(row.role)}
+                          title="Modifica ruolo"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+
+                        {/* Unassign */}
+                        {assignedUser && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-red-600 hover:text-red-700"
+                            onClick={() => handleUnassign(assignedUser.id)}
+                            title="Rimuovi assegnazione"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* Persone senza ruolo */}
       {unassignedUsers.length > 0 && (
-        <Card className="border border-border">
-          <CardHeader className="p-6">
-            <span className="text-base font-bold text-foreground">
-              Persone senza ruolo
-            </span>
-          </CardHeader>
-          <CardContent className="p-6 pt-0">
-            <div className="space-y-2">
-              {unassignedUsers.map((u) => (
-                <div key={u.id} className="flex items-center py-2 gap-3">
-                  <span className="text-sm text-foreground flex-1">{u.full_name}</span>
-                  <Select
-                    onValueChange={(val) => {
-                      if (val && val !== "__none__") {
-                        handleAssign(val, u.id);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="w-52 h-8 text-sm">
-                      <SelectValue placeholder="Assegna ruolo..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Nessun ruolo</SelectItem>
-                      {roles
-                        .filter((r) => !userByRoleId.has(r.id))
-                        .map((r) => (
-                          <SelectItem key={r.id} value={r.id}>
-                            {r.name}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <div className="rounded-md border border-border p-6">
+          <h2 className="text-sm font-bold text-foreground mb-2">Persone senza ruolo</h2>
+          <div className="flex items-center flex-wrap gap-2">
+            {unassignedUsers.map((u) => (
+              <Badge key={u.id} variant="secondary" className="inline-flex items-center gap-2 text-xs">
+                <span>{u.full_name}</span>
+                <Select
+                  onValueChange={(val) => {
+                    if (val && val !== "__none__") {
+                      handleAssign(val, u.id);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-5 w-28 text-xs border-0 bg-transparent p-0 shadow-none">
+                    <SelectValue placeholder="Assegna..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Nessun ruolo</SelectItem>
+                    {roles
+                      .filter((r) => !userByRoleId.has(r.id))
+                      .map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </Badge>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* ── Area Dialog ────────────────────────────────────────────────────── */}
