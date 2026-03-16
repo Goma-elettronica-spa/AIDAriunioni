@@ -15,6 +15,7 @@ import RootRoute from "@/pages/RootRoute";
 import SuperadminLayout from "@/layouts/SuperadminLayout";
 import SuperadminDashboard from "@/pages/superadmin/Dashboard";
 import Tenants from "@/pages/superadmin/Tenants";
+import TenantDetail from "@/pages/superadmin/TenantDetail";
 
 import AppLayout from "@/layouts/AppLayout";
 import DashboardPage from "@/pages/app/DashboardPage";
