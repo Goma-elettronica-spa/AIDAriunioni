@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { ArrowLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowLeft, ChevronRight, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,6 +27,9 @@ export default function MeetingDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isAdmin = user?.role === "org_admin";
+
+  const [activeTab, setActiveTab] = useState("overview");
+  const [triggerGenerate, setTriggerGenerate] = useState(false);
 
   const meeting = useQuery({
     queryKey: ["meeting-detail", meetingId],
@@ -81,6 +85,7 @@ export default function MeetingDetailPage() {
   const sc = statusConfig[m.status] ?? statusConfig.draft;
   const nextIdx = statusFlow.indexOf(m.status) + 1;
   const nextStatus = nextIdx < statusFlow.length ? statusFlow[nextIdx] : null;
+  const hasTranscriptOrSummary = !!(m.transcript_url || m.summary_text);
 
   return (
     <div className="space-y-6">
@@ -116,22 +121,37 @@ export default function MeetingDetailPage() {
             </p>
           </div>
 
-          {isAdmin && nextStatus && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => statusMutation.mutate(nextStatus)}
-              disabled={statusMutation.isPending}
-            >
-              {statusConfig[nextStatus]?.label ?? nextStatus}
-              <ChevronRight className="h-3.5 w-3.5 ml-1" />
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {isAdmin && hasTranscriptOrSummary && (
+              <Button
+                className="bg-foreground text-background hover:bg-foreground/90"
+                size="sm"
+                onClick={() => {
+                  setActiveTab("tasks");
+                  setTriggerGenerate(true);
+                }}
+              >
+                <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                Claudietto generami i task
+              </Button>
+            )}
+            {isAdmin && nextStatus && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => statusMutation.mutate(nextStatus)}
+                disabled={statusMutation.isPending}
+              >
+                {statusConfig[nextStatus]?.label ?? nextStatus}
+                <ChevronRight className="h-3.5 w-3.5 ml-1" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="overview" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0">
           {[
             { value: "overview", label: "Overview" },
@@ -156,7 +176,15 @@ export default function MeetingDetailPage() {
             <MaterialeTab meeting={m} isAdmin={isAdmin} />
           </TabsContent>
           <TabsContent value="tasks">
-            <TasksTab meetingId={m.id} tenantId={m.tenant_id} isAdmin={isAdmin} transcriptUrl={m.transcript_url} summaryText={m.summary_text} />
+            <TasksTab
+              meetingId={m.id}
+              tenantId={m.tenant_id}
+              isAdmin={isAdmin}
+              transcriptUrl={m.transcript_url}
+              summaryText={m.summary_text}
+              triggerGenerate={triggerGenerate}
+              onGenerateHandled={() => setTriggerGenerate(false)}
+            />
           </TabsContent>
         </div>
       </Tabs>

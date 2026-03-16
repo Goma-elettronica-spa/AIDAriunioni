@@ -34,6 +34,8 @@ interface Props {
   isAdmin: boolean;
   transcriptUrl: string | null;
   summaryText?: string | null;
+  triggerGenerate?: boolean;
+  onGenerateHandled?: () => void;
 }
 
 interface SuggestedTask {
@@ -74,7 +76,7 @@ const deadlineLabels: Record<string, string> = {
   next_quarter: "Quarter successivo",
 };
 
-export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl, summaryText }: Props) {
+export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl, summaryText, triggerGenerate, onGenerateHandled }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [generating, setGenerating] = useState(false);
@@ -169,6 +171,14 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl, summaryT
       setEdits((prev) => ({ ...prev, ...newEdits }));
     }
   }, [suggestedTasks.data, tenantUsers.data]);
+
+  // Handle triggerGenerate from parent (Claudietto button)
+  useEffect(() => {
+    if (triggerGenerate && !generating) {
+      generateSuggestedTasks();
+      onGenerateHandled?.();
+    }
+  }, [triggerGenerate]);
 
   const generateSuggestedTasks = async () => {
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY || "";
