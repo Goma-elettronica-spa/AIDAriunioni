@@ -57,7 +57,7 @@ export default function AuthCallback() {
             const { data: joinReq } = await supabase
               .from("join_requests")
               .select("id, status")
-              .eq("user_auth_id", session.user.id)
+              .eq("user_id", session.user.id)
               .eq("status", "pending")
               .maybeSingle();
 
@@ -74,7 +74,7 @@ export default function AuthCallback() {
             const { data: joinReq } = await supabase
               .from("join_requests")
               .select("id, status")
-              .eq("user_auth_id", session.user.id)
+              .eq("user_id", session.user.id)
               .eq("status", "pending")
               .maybeSingle();
 
