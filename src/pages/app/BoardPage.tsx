@@ -127,6 +127,7 @@ export default function BoardPage() {
 
   // Subtask input state
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
