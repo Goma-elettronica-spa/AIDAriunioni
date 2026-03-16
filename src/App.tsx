@@ -10,6 +10,7 @@ import Login from "@/pages/Login";
 import AuthCallback from "@/pages/AuthCallback";
 import ResetPassword from "@/pages/ResetPassword";
 import NotFound from "@/pages/NotFound";
+import RootRoute from "@/pages/RootRoute";
 
 import SuperadminLayout from "@/layouts/SuperadminLayout";
 import SuperadminDashboard from "@/pages/superadmin/Dashboard";
