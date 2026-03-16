@@ -317,7 +317,6 @@ export default function TeamPage() {
           <SelectContent>
             <SelectItem value="all">Tutti i ruoli</SelectItem>
             <SelectItem value="org_admin">Org Admin</SelectItem>
-            <SelectItem value="information_officer">Information Officer</SelectItem>
             <SelectItem value="dirigente">Dirigente</SelectItem>
           </SelectContent>
         </Select>
@@ -472,9 +471,8 @@ export default function TeamPage() {
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                 <SelectContent>
                   <SelectItem value="org_admin">Org Admin</SelectItem>
-                  <SelectItem value="information_officer">Information Officer</SelectItem>
                   <SelectItem value="dirigente">Dirigente</SelectItem>
                 </SelectContent>
               </Select>
@@ -541,7 +539,6 @@ export default function TeamPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="org_admin">Org Admin</SelectItem>
-                  <SelectItem value="information_officer">Information Officer</SelectItem>
                   <SelectItem value="dirigente">Dirigente</SelectItem>
                 </SelectContent>
               </Select>
