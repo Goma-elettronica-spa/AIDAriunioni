@@ -337,23 +337,23 @@ export default function SuperadminDashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {statCards.map((card) => (
           <Card key={card.key} className="border border-border">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-md bg-muted">
-                  <card.icon className="h-4 w-4 text-muted-foreground" />
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+                <div className="p-1.5 sm:p-2 rounded-md bg-muted">
+                  <card.icon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground" />
                 </div>
               </div>
               {stats.isLoading ? (
                 <Skeleton className="h-8 w-16 mb-1" />
               ) : (
-                <p className="text-3xl font-semibold font-mono text-foreground">
+                <p className="text-2xl sm:text-3xl font-semibold font-mono text-foreground">
                   {stats.data?.[card.key] ?? 0}
                 </p>
               )}
-              <p className="text-sm text-muted-foreground mt-1">{card.label}</p>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">{card.label}</p>
             </CardContent>
           </Card>
         ))}
@@ -361,7 +361,7 @@ export default function SuperadminDashboard() {
 
       {/* Activity Timeline */}
       <div>
-        <h2 className="text-lg font-semibold text-foreground mb-4">Attività Recente</h2>
+        <h2 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">Attività Recente</h2>
         {activity.isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -378,19 +378,21 @@ export default function SuperadminDashboard() {
               {activity.data.map((log) => {
                 const badge = actionBadge[log.action] ?? { label: log.action, variant: "secondary" as const };
                 return (
-                  <div key={log.id} className="flex items-center gap-3 px-4 py-3 text-sm">
-                    <span className="text-xs text-muted-foreground font-mono shrink-0 w-[130px]">
-                      {new Date(log.created_at).toLocaleString("it-IT", {
-                        day: "2-digit",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                    <Badge variant={badge.variant} className="text-[10px] shrink-0">
-                      {badge.label}
-                    </Badge>
-                    <span className="text-foreground truncate">
+                  <div key={log.id} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 text-sm">
+                    <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                      <span className="text-xs text-muted-foreground font-mono shrink-0">
+                        {new Date(log.created_at).toLocaleString("it-IT", {
+                          day: "2-digit",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                      <Badge variant={badge.variant} className="text-[10px] shrink-0">
+                        {badge.label}
+                      </Badge>
+                    </div>
+                    <span className="text-foreground truncate text-xs sm:text-sm">
                       <span className="font-medium">{log.user_name}</span>
                       {" ha "}
                       {log.action === "create" ? "creato" : log.action === "update" ? "aggiornato" : log.action === "delete" ? "eliminato" : log.action}
