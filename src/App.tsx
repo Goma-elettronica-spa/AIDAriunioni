@@ -18,6 +18,7 @@ import Tenants from "@/pages/superadmin/Tenants";
 import TenantDetail from "@/pages/superadmin/TenantDetail";
 import PermissionsPage from "@/pages/superadmin/Permissions";
 import AnalyticsPage from "@/pages/superadmin/Analytics";
+import SuperadminAuditLog from "@/pages/superadmin/AuditLog";
 
 import AppLayout from "@/layouts/AppLayout";
 import DashboardPage from "@/pages/app/DashboardPage";
@@ -62,6 +63,7 @@ const App = () => (
               <Route path="/superadmin/tenants/:id" element={<TenantDetail />} />
               <Route path="/superadmin/permissions" element={<PermissionsPage />} />
               <Route path="/superadmin/analytics" element={<AnalyticsPage />} />
+              <Route path="/superadmin/audit-log" element={<SuperadminAuditLog />} />
             </Route>
 
             {/* App routes */}
