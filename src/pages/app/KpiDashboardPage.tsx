@@ -576,13 +576,26 @@ function KpiByAreaSection({ tenantId }: { tenantId: string }) {
     },
   });
 
+  // Fetch user-area M:N mappings from user_functional_areas bridge table
+  const userAreaMappingsQuery = useQuery({
+    queryKey: ["kpi-dashboard-user-area-mappings", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("user_functional_areas")
+        .select("user_id, functional_area_id")
+        .eq("tenant_id", tenantId);
+      if (error) throw error;
+      return (data ?? []) as { user_id: string; functional_area_id: string }[];
+    },
+  });
+
   const usersWithKpis = useQuery({
     queryKey: ["kpi-dashboard-area-users", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
-      // Get all users with their functional_area_id
+      // Get all active users
       const { data: users, error: usersErr } = await (supabase.from as any)("users")
-        .select("id, full_name, functional_area_id")
+        .select("id, full_name")
         .eq("tenant_id", tenantId)
         .eq("is_active", true)
         .order("full_name");
@@ -648,7 +661,6 @@ function KpiByAreaSection({ tenantId }: { tenantId: string }) {
         return {
           id: u.id,
           full_name: u.full_name,
-          functional_area_id: u.functional_area_id,
           kpis,
         };
       });
@@ -657,23 +669,47 @@ function KpiByAreaSection({ tenantId }: { tenantId: string }) {
 
   const areas = areasQuery.data ?? [];
   const users = usersWithKpis.data ?? [];
+  const userAreaMappings = userAreaMappingsQuery.data ?? [];
 
-  // Group users by area
-  const usersByArea = useMemo(() => {
-    const map = new Map<string | null, typeof users>();
-    for (const u of users) {
-      const areaId = u.functional_area_id ?? null;
-      const list = map.get(areaId) ?? [];
-      list.push(u);
-      map.set(areaId, list);
+  // Build a map: userId -> Set of area IDs (M:N)
+  const userAreasMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const mapping of userAreaMappings) {
+      if (!map.has(mapping.user_id)) map.set(mapping.user_id, new Set());
+      map.get(mapping.user_id)!.add(mapping.functional_area_id);
     }
     return map;
-  }, [users]);
+  }, [userAreaMappings]);
 
-  const areaIds = areas.map((a) => a.id);
+  // Group users by area — a user can appear in MULTIPLE areas
+  const usersByArea = useMemo(() => {
+    const map = new Map<string | null, typeof users>();
+    const assignedUserIds = new Set<string>();
+
+    for (const u of users) {
+      const areaIds = userAreasMap.get(u.id);
+      if (areaIds && areaIds.size > 0) {
+        assignedUserIds.add(u.id);
+        for (const areaId of areaIds) {
+          const list = map.get(areaId) ?? [];
+          list.push(u);
+          map.set(areaId, list);
+        }
+      }
+    }
+
+    // Users not assigned to any area go to "unassigned"
+    const unassigned = users.filter((u) => !assignedUserIds.has(u.id));
+    if (unassigned.length > 0) {
+      map.set(null, unassigned);
+    }
+
+    return map;
+  }, [users, userAreasMap]);
+
   const unassignedUsers = usersByArea.get(null) ?? [];
 
-  if (areasQuery.isLoading || usersWithKpis.isLoading) {
+  if (areasQuery.isLoading || usersWithKpis.isLoading || userAreaMappingsQuery.isLoading) {
     return (
       <div>
         <div className="flex items-center gap-3 mb-4">

@@ -10,6 +10,7 @@ import {
   Building2,
   Users,
   UserCog,
+  X,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -65,13 +72,20 @@ type BoardRole = {
   created_at: string;
 };
 
+type UserFunctionalArea = {
+  id: string;
+  user_id: string;
+  functional_area_id: string;
+  tenant_id: string;
+  created_at: string;
+};
+
 type TenantUser = {
   id: string;
   full_name: string;
   email: string;
   role: string;
   board_role_id: string | null;
-  functional_area_id: string | null;
 };
 
 // ─── Functional Areas Section ────────────────────────────────────────────────
@@ -558,54 +572,129 @@ function UserAssignmentSection({
         .order("full_name");
       if (error) throw error;
 
-      // Also fetch board_role_id and functional_area_id via a separate query
+      // Also fetch board_role_id via a separate query
       // since these columns may not be in generated types
       const userIds = (data ?? []).map((u) => u.id);
       if (userIds.length === 0) return [];
 
       const { data: extData } = await (supabase.from as any)("users")
-        .select("id, board_role_id, functional_area_id")
+        .select("id, board_role_id")
         .in("id", userIds);
 
-      const extMap = new Map<string, { board_role_id: string | null; functional_area_id: string | null }>();
+      const extMap = new Map<string, { board_role_id: string | null }>();
       for (const row of extData ?? []) {
         extMap.set(row.id, {
           board_role_id: row.board_role_id ?? null,
-          functional_area_id: row.functional_area_id ?? null,
         });
       }
 
       return (data ?? []).map((u) => ({
         ...u,
         board_role_id: extMap.get(u.id)?.board_role_id ?? null,
-        functional_area_id: extMap.get(u.id)?.functional_area_id ?? null,
       })) as TenantUser[];
     },
   });
 
-  const updateUserMutation = useMutation({
+  // Fetch user_functional_areas (M:N bridge table)
+  const userAreasQuery = useQuery({
+    queryKey: ["board-roles-user-areas", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("user_functional_areas")
+        .select("*")
+        .eq("tenant_id", tenantId);
+      if (error) throw error;
+      return (data ?? []) as UserFunctionalArea[];
+    },
+  });
+
+  // Build a map: userId -> Set of functional_area_ids
+  const userAreaMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const ua of userAreasQuery.data ?? []) {
+      if (!map.has(ua.user_id)) map.set(ua.user_id, new Set());
+      map.get(ua.user_id)!.add(ua.functional_area_id);
+    }
+    return map;
+  }, [userAreasQuery.data]);
+
+  const updateBoardRoleMutation = useMutation({
     mutationFn: async ({
       userId,
-      field,
       value,
     }: {
       userId: string;
-      field: "board_role_id" | "functional_area_id";
       value: string | null;
     }) => {
       const { error } = await (supabase.from as any)("users")
-        .update({ [field]: value })
+        .update({ board_role_id: value })
         .eq("id", userId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["board-roles-users"] });
-      toast({ title: "Assegnazione aggiornata" });
+      toast({ title: "Ruolo board aggiornato" });
     },
     onError: (err: any) => {
       toast({ title: "Errore", description: err.message, variant: "destructive" });
     },
   });
+
+  const addAreaMutation = useMutation({
+    mutationFn: async ({
+      userId,
+      functionalAreaId,
+    }: {
+      userId: string;
+      functionalAreaId: string;
+    }) => {
+      const { error } = await (supabase.from as any)("user_functional_areas")
+        .insert({
+          user_id: userId,
+          functional_area_id: functionalAreaId,
+          tenant_id: tenantId,
+        });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["board-roles-user-areas"] });
+      toast({ title: "Area assegnata" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const removeAreaMutation = useMutation({
+    mutationFn: async ({
+      userId,
+      functionalAreaId,
+    }: {
+      userId: string;
+      functionalAreaId: string;
+    }) => {
+      const { error } = await (supabase.from as any)("user_functional_areas")
+        .delete()
+        .eq("user_id", userId)
+        .eq("functional_area_id", functionalAreaId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["board-roles-user-areas"] });
+      toast({ title: "Area rimossa" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleToggleArea = (userId: string, areaId: string, isChecked: boolean) => {
+    if (isChecked) {
+      addAreaMutation.mutate({ userId, functionalAreaId: areaId });
+    } else {
+      removeAreaMutation.mutate({ userId, functionalAreaId: areaId });
+    }
+  };
 
   const roleMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -648,76 +737,127 @@ function UserAssignmentSection({
                   <TableHead className="py-3 px-4">Nome</TableHead>
                   <TableHead className="py-3 px-4">Email</TableHead>
                   <TableHead className="py-3 px-4">Ruolo Board</TableHead>
-                  <TableHead className="py-3 px-4">Area Funzionale</TableHead>
+                  <TableHead className="py-3 px-4">Aree Funzionali</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {usersQuery.data.map((u) => (
-                  <TableRow key={u.id}>
-                    <TableCell className="py-3 px-4">
-                      <span className="text-sm font-medium text-foreground">{u.full_name}</span>
-                    </TableCell>
-                    <TableCell className="py-3 px-4">
-                      <span className="text-sm text-muted-foreground">{u.email}</span>
-                    </TableCell>
-                    <TableCell className="py-3 px-4">
-                      <Select
-                        value={u.board_role_id ?? "__none__"}
-                        onValueChange={(val) =>
-                          updateUserMutation.mutate({
-                            userId: u.id,
-                            field: "board_role_id",
-                            value: val === "__none__" ? null : val,
-                          })
-                        }
-                      >
-                        <SelectTrigger className="w-48 h-8 text-sm">
-                          <SelectValue>
-                            {u.board_role_id
-                              ? roleMap.get(u.board_role_id) ?? "—"
-                              : <span className="text-muted-foreground">Non assegnato</span>}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">Non assegnato</SelectItem>
-                          {roles.map((r) => (
-                            <SelectItem key={r.id} value={r.id}>
-                              {r.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell className="py-3 px-4">
-                      <Select
-                        value={u.functional_area_id ?? "__none__"}
-                        onValueChange={(val) =>
-                          updateUserMutation.mutate({
-                            userId: u.id,
-                            field: "functional_area_id",
-                            value: val === "__none__" ? null : val,
-                          })
-                        }
-                      >
-                        <SelectTrigger className="w-48 h-8 text-sm">
-                          <SelectValue>
-                            {u.functional_area_id
-                              ? areaMap.get(u.functional_area_id) ?? "—"
-                              : <span className="text-muted-foreground">Non assegnato</span>}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">Non assegnato</SelectItem>
-                          {areas.map((a) => (
-                            <SelectItem key={a.id} value={a.id}>
-                              {a.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {usersQuery.data.map((u) => {
+                  const assignedAreaIds = userAreaMap.get(u.id) ?? new Set<string>();
+                  return (
+                    <TableRow key={u.id}>
+                      <TableCell className="py-3 px-4">
+                        <span className="text-sm font-medium text-foreground">{u.full_name}</span>
+                      </TableCell>
+                      <TableCell className="py-3 px-4">
+                        <span className="text-sm text-muted-foreground">{u.email}</span>
+                      </TableCell>
+                      <TableCell className="py-3 px-4">
+                        <Select
+                          value={u.board_role_id ?? "__none__"}
+                          onValueChange={(val) =>
+                            updateBoardRoleMutation.mutate({
+                              userId: u.id,
+                              value: val === "__none__" ? null : val,
+                            })
+                          }
+                        >
+                          <SelectTrigger className="w-48 h-8 text-sm">
+                            <SelectValue>
+                              {u.board_role_id
+                                ? roleMap.get(u.board_role_id) ?? "—"
+                                : <span className="text-muted-foreground">Non assegnato</span>}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">Non assegnato</SelectItem>
+                            {roles.map((r) => (
+                              <SelectItem key={r.id} value={r.id}>
+                                {r.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="py-3 px-4">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Show assigned areas as badges */}
+                          {areas
+                            .filter((a) => assignedAreaIds.has(a.id))
+                            .map((a) => (
+                              <Badge
+                                key={a.id}
+                                variant="secondary"
+                                className="inline-flex items-center gap-1 text-xs"
+                              >
+                                {a.name}
+                                <button
+                                  type="button"
+                                  className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                                  onClick={() =>
+                                    handleToggleArea(u.id, a.id, false)
+                                  }
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            ))}
+
+                          {/* Popover to add/remove areas */}
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                {assignedAreaIds.size === 0
+                                  ? "Assegna aree"
+                                  : "Modifica"}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              className="w-56 p-3"
+                              align="start"
+                            >
+                              <p className="text-sm font-medium mb-2">
+                                Aree Funzionali
+                              </p>
+                              {areas.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                  Nessuna area disponibile
+                                </p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {areas.map((a) => (
+                                    <label
+                                      key={a.id}
+                                      className="flex items-center gap-2 cursor-pointer"
+                                    >
+                                      <Checkbox
+                                        checked={assignedAreaIds.has(a.id)}
+                                        onCheckedChange={(checked) =>
+                                          handleToggleArea(
+                                            u.id,
+                                            a.id,
+                                            !!checked
+                                          )
+                                        }
+                                      />
+                                      <span className="text-sm">
+                                        {a.name}
+                                      </span>
+                                    </label>
+                                  ))}
+                                </div>
+                              )}
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
