@@ -2,7 +2,10 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { UserPlus, Pencil, Power, Check, X, BarChart3, ChevronDown, ChevronRight, Plus, EyeOff } from "lucide-react";
+import {
+  UserPlus, Pencil, Power, Check, X, BarChart3, ChevronDown, ChevronRight,
+  Plus, EyeOff,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,9 +26,14 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
 import { toast } from "@/hooks/use-toast";
 import { writeAuditLog } from "@/lib/audit";
 import KpiManagementSheet from "@/components/team/KpiManagementSheet";
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 type UserRow = {
   id: string;
@@ -34,6 +42,22 @@ type UserRow = {
   role: string;
   job_title: string | null;
   is_active: boolean;
+};
+
+type FunctionalArea = {
+  id: string;
+  tenant_id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+};
+
+type UserFunctionalArea = {
+  id: string;
+  user_id: string;
+  functional_area_id: string;
+  tenant_id: string;
+  created_at: string;
 };
 
 type KpiDef = {
@@ -66,11 +90,13 @@ type JoinRequest = {
   created_at: string;
 };
 
-const roleConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
-  org_admin: { label: "Org Admin", variant: "default" },
-  information_officer: { label: "Info Officer", variant: "outline" },
+const roleConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline"; className?: string }> = {
+  org_admin: { label: "Org Admin", variant: "default", className: "bg-black text-white hover:bg-black/90" },
+  information_officer: { label: "Info Officer", variant: "default", className: "bg-blue-600 text-white hover:bg-blue-700" },
   dirigente: { label: "Dirigente", variant: "secondary" },
 };
+
+// ── Helper components ────────────────────────────────────────────────────────
 
 function StatusDot({ active }: { active: boolean }) {
   return (
@@ -114,7 +140,6 @@ function InlineKpiValue({
           .eq("id", entry.id);
         if (error) throw error;
       } else {
-        // Find latest meeting for this tenant to associate the entry
         const { data: latestMeeting } = await supabase
           .from("meetings")
           .select("id")
@@ -201,6 +226,222 @@ function InlineKpiValue({
   );
 }
 
+// ── Inline editable job title ────────────────────────────────────────────────
+
+function InlineJobTitle({
+  value,
+  userId,
+  tenantId,
+  currentUserId,
+  canEdit,
+}: {
+  value: string | null;
+  userId: string;
+  tenantId: string;
+  currentUserId: string;
+  canEdit: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async (newTitle: string) => {
+      const { error } = await supabase
+        .from("users")
+        .update({ job_title: newTitle || null })
+        .eq("id", userId);
+      if (error) throw error;
+    },
+    onSuccess: (_data, newTitle) => {
+      queryClient.invalidateQueries({ queryKey: ["team-users"] });
+      writeAuditLog({
+        tenantId,
+        userId: currentUserId,
+        action: "update",
+        entityType: "user",
+        entityId: userId,
+        oldValues: { job_title: value },
+        newValues: { job_title: newTitle || null },
+      });
+      setEditing(false);
+      toast({ title: "Ruolo organizzativo aggiornato" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleSave = () => {
+    if (draft.trim() !== (value ?? "")) {
+      mutation.mutate(draft.trim());
+    } else {
+      setEditing(false);
+    }
+  };
+
+  if (editing && canEdit) {
+    return (
+      <Input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={handleSave}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") handleSave();
+          if (e.key === "Escape") setEditing(false);
+        }}
+        className="h-8 w-36 text-sm"
+        autoFocus
+        placeholder="es. CEO, CFO..."
+      />
+    );
+  }
+
+  return (
+    <span
+      className={canEdit ? "cursor-pointer hover:underline text-sm" : "text-sm text-muted-foreground"}
+      onClick={() => {
+        if (canEdit) {
+          setDraft(value ?? "");
+          setEditing(true);
+        }
+      }}
+    >
+      {value || "\u2014"}
+    </span>
+  );
+}
+
+// ── Area badges for a user (with add/remove) ────────────────────────────────
+
+function UserAreaBadges({
+  userId,
+  tenantId,
+  currentUserId,
+  userAreaIds,
+  allAreas,
+  canEdit,
+  onChanged,
+}: {
+  userId: string;
+  tenantId: string;
+  currentUserId: string;
+  userAreaIds: string[];
+  allAreas: FunctionalArea[];
+  canEdit: boolean;
+  onChanged: () => void;
+}) {
+  const [popoverOpen, setPopoverOpen] = useState(false);
+
+  const addMutation = useMutation({
+    mutationFn: async (areaId: string) => {
+      const { error } = await (supabase.from as any)("user_functional_areas")
+        .insert({ user_id: userId, functional_area_id: areaId, tenant_id: tenantId });
+      if (error) throw error;
+    },
+    onSuccess: (_data, areaId) => {
+      onChanged();
+      const area = allAreas.find((a) => a.id === areaId);
+      writeAuditLog({
+        tenantId,
+        userId: currentUserId,
+        action: "create",
+        entityType: "user_functional_area",
+        entityId: userId,
+        newValues: { functional_area_id: areaId, area_name: area?.name },
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: async (areaId: string) => {
+      const { error } = await (supabase.from as any)("user_functional_areas")
+        .delete()
+        .eq("user_id", userId)
+        .eq("functional_area_id", areaId);
+      if (error) throw error;
+    },
+    onSuccess: (_data, areaId) => {
+      onChanged();
+      const area = allAreas.find((a) => a.id === areaId);
+      writeAuditLog({
+        tenantId,
+        userId: currentUserId,
+        action: "delete",
+        entityType: "user_functional_area",
+        entityId: userId,
+        oldValues: { functional_area_id: areaId, area_name: area?.name },
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const assignedAreas = allAreas.filter((a) => userAreaIds.includes(a.id));
+  const unassignedAreas = allAreas.filter((a) => !userAreaIds.includes(a.id));
+
+  return (
+    <div className="flex items-center flex-wrap gap-1">
+      {assignedAreas.map((area) => (
+        <Badge key={area.id} variant="outline" className="inline-flex items-center text-xs gap-1">
+          {area.name}
+          {canEdit && (
+            <button
+              type="button"
+              className="ml-0.5 rounded-full hover:bg-muted p-0.5"
+              onClick={(e) => {
+                e.stopPropagation();
+                removeMutation.mutate(area.id);
+              }}
+            >
+              <X className="h-2.5 w-2.5" />
+            </button>
+          )}
+        </Badge>
+      ))}
+      {canEdit && (
+        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex items-center justify-center h-5 w-5 rounded-full border border-dashed border-border text-muted-foreground hover:bg-muted"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-48 p-2" align="start" onClick={(e) => e.stopPropagation()}>
+            {unassignedAreas.length === 0 ? (
+              <p className="text-xs text-muted-foreground p-2">Tutte le aree assegnate</p>
+            ) : (
+              <div className="space-y-1">
+                {unassignedAreas.map((area) => (
+                  <button
+                    key={area.id}
+                    type="button"
+                    className="flex items-center w-full text-left text-sm px-2 py-1.5 rounded hover:bg-muted"
+                    onClick={() => {
+                      addMutation.mutate(area.id);
+                    }}
+                  >
+                    {area.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
+      )}
+    </div>
+  );
+}
+
+// ── Main Page ────────────────────────────────────────────────────────────────
+
 export default function TeamPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -208,6 +449,7 @@ export default function TeamPage() {
 
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [areaFilter, setAreaFilter] = useState("all");
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
   const [showHiddenKpis, setShowHiddenKpis] = useState(false);
 
@@ -220,6 +462,7 @@ export default function TeamPage() {
   const [invName, setInvName] = useState("");
   const [invTitle, setInvTitle] = useState("");
   const [invRole, setInvRole] = useState("dirigente");
+  const [invAreaIds, setInvAreaIds] = useState<string[]>([]);
 
   // Edit dialog
   const [editOpen, setEditOpen] = useState(false);
@@ -231,7 +474,16 @@ export default function TeamPage() {
   // KPI sheet
   const [kpiUser, setKpiUser] = useState<{ id: string; name: string } | null>(null);
 
+  // New area inline
+  const [newAreaName, setNewAreaName] = useState("");
+  const [addingArea, setAddingArea] = useState(false);
+  const [editingAreaId, setEditingAreaId] = useState<string | null>(null);
+  const [editingAreaName, setEditingAreaName] = useState("");
+
   const isAdmin = user?.role === "org_admin" || user?.role === "information_officer";
+  const isOrgAdmin = user?.role === "org_admin";
+
+  // ── Queries ──────────────────────────────────────────────────────────────
 
   const users = useQuery({
     queryKey: ["team-users", tenantId],
@@ -247,7 +499,31 @@ export default function TeamPage() {
     },
   });
 
-  // Fetch ALL kpi_definitions for the tenant
+  const functionalAreas = useQuery({
+    queryKey: ["functional-areas", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("functional_areas")
+        .select("*")
+        .eq("tenant_id", tenantId!)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as FunctionalArea[];
+    },
+  });
+
+  const userFunctionalAreas = useQuery({
+    queryKey: ["user-functional-areas", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("user_functional_areas")
+        .select("*")
+        .eq("tenant_id", tenantId!);
+      if (error) throw error;
+      return (data ?? []) as UserFunctionalArea[];
+    },
+  });
+
   const allKpis = useQuery({
     queryKey: ["kpi-all-definitions", tenantId],
     enabled: !!tenantId,
@@ -262,19 +538,16 @@ export default function TeamPage() {
     },
   });
 
-  // Fetch latest kpi_entry for each KPI definition
   const latestEntries = useQuery({
     queryKey: ["kpi-latest-entries", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
-      // Get all entries ordered by created_at desc, then deduplicate client-side
       const { data, error } = await supabase
         .from("kpi_entries")
         .select("id, kpi_id, current_value, created_at")
         .eq("tenant_id", tenantId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      // Keep only the latest entry per kpi_id
       const map = new Map<string, KpiEntry>();
       for (const row of data ?? []) {
         if (!map.has(row.kpi_id)) {
@@ -285,7 +558,6 @@ export default function TeamPage() {
     },
   });
 
-  // Fetch pending join requests
   const joinRequests = useQuery({
     queryKey: ["join-requests", tenantId],
     enabled: !!tenantId && user?.role === "org_admin",
@@ -301,7 +573,20 @@ export default function TeamPage() {
     },
   });
 
-  // Group KPIs by user_id
+  // ── Derived data ─────────────────────────────────────────────────────────
+
+  const areas = functionalAreas.data ?? [];
+
+  // Map: userId -> array of area IDs
+  const userAreaMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const ufa of userFunctionalAreas.data ?? []) {
+      if (!map[ufa.user_id]) map[ufa.user_id] = [];
+      map[ufa.user_id].push(ufa.functional_area_id);
+    }
+    return map;
+  }, [userFunctionalAreas.data]);
+
   const kpisByUser = useMemo(() => {
     const map: Record<string, KpiDef[]> = {};
     for (const kpi of allKpis.data ?? []) {
@@ -311,7 +596,6 @@ export default function TeamPage() {
     return map;
   }, [allKpis.data]);
 
-  // KPI counts (active only)
   const kpiCountMap = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const kpi of allKpis.data ?? []) {
@@ -328,9 +612,13 @@ export default function TeamPage() {
       if (roleFilter !== "all" && u.role !== roleFilter) return false;
       if (statusFilter === "active" && !u.is_active) return false;
       if (statusFilter === "inactive" && u.is_active) return false;
+      if (areaFilter !== "all") {
+        const uAreas = userAreaMap[u.id] ?? [];
+        if (!uAreas.includes(areaFilter)) return false;
+      }
       return true;
     });
-  }, [users.data, roleFilter, statusFilter]);
+  }, [users.data, roleFilter, statusFilter, areaFilter, userAreaMap]);
 
   const toggleExpanded = (userId: string) => {
     setExpandedUsers((prev) => {
@@ -341,20 +629,112 @@ export default function TeamPage() {
     });
   };
 
+  // ── Mutations ────────────────────────────────────────────────────────────
+
+  // Functional area CRUD
+  const createAreaMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const { error } = await (supabase.from as any)("functional_areas")
+        .insert({ tenant_id: tenantId, name });
+      if (error) throw error;
+    },
+    onSuccess: (_data, name) => {
+      queryClient.invalidateQueries({ queryKey: ["functional-areas"] });
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "create",
+        entityType: "functional_area",
+        entityId: crypto.randomUUID(),
+        newValues: { name },
+      });
+      setNewAreaName("");
+      setAddingArea(false);
+      toast({ title: "Area creata" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateAreaMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const { error } = await (supabase.from as any)("functional_areas")
+        .update({ name })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, { id, name }) => {
+      queryClient.invalidateQueries({ queryKey: ["functional-areas"] });
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "update",
+        entityType: "functional_area",
+        entityId: id,
+        newValues: { name },
+      });
+      setEditingAreaId(null);
+      toast({ title: "Area aggiornata" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteAreaMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase.from as any)("functional_areas")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ["functional-areas"] });
+      queryClient.invalidateQueries({ queryKey: ["user-functional-areas"] });
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "delete",
+        entityType: "functional_area",
+        entityId: id,
+      });
+      toast({ title: "Area eliminata" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
+  // User invite
   const inviteMutation = useMutation({
     mutationFn: async () => {
+      const newUserId = crypto.randomUUID();
       const { error } = await supabase.from("users").insert({
-        id: crypto.randomUUID(),
+        id: newUserId,
         email: invEmail.trim().toLowerCase(),
         full_name: invName.trim(),
-        job_title: invTitle.trim(),
+        job_title: invTitle.trim() || null,
         role: invRole,
         tenant_id: tenantId!,
       });
       if (error) throw error;
+
+      // Add functional areas
+      if (invAreaIds.length > 0) {
+        const rows = invAreaIds.map((areaId) => ({
+          user_id: newUserId,
+          functional_area_id: areaId,
+          tenant_id: tenantId!,
+        }));
+        const { error: areaError } = await (supabase.from as any)("user_functional_areas")
+          .insert(rows);
+        if (areaError) throw areaError;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-users"] });
+      queryClient.invalidateQueries({ queryKey: ["user-functional-areas"] });
       writeAuditLog({
         tenantId: tenantId!,
         userId: user!.id,
@@ -368,6 +748,7 @@ export default function TeamPage() {
       setInvName("");
       setInvTitle("");
       setInvRole("dirigente");
+      setInvAreaIds([]);
       toast({
         title: "Utente creato",
         description: "L'utente ricevera' il magic link al primo accesso",
@@ -378,6 +759,7 @@ export default function TeamPage() {
     },
   });
 
+  // User edit
   const editMutation = useMutation({
     mutationFn: async () => {
       if (!editUser) return;
@@ -400,8 +782,8 @@ export default function TeamPage() {
           action: "update",
           entityType: "user",
           entityId: editUser.id,
-          oldValues: { full_name: editUser.full_name, role: editUser.role },
-          newValues: { full_name: editName.trim(), role: editRole },
+          oldValues: { full_name: editUser.full_name, role: editUser.role, job_title: editUser.job_title },
+          newValues: { full_name: editName.trim(), role: editRole, job_title: editTitle.trim() || null },
         });
       }
       setEditOpen(false);
@@ -437,7 +819,35 @@ export default function TeamPage() {
     },
   });
 
-  // Toggle is_required on a KPI definition
+  // Inline role change
+  const changeRoleMutation = useMutation({
+    mutationFn: async ({ id, newRole }: { id: string; newRole: string }) => {
+      const { error } = await supabase
+        .from("users")
+        .update({ role: newRole })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, { id, newRole }) => {
+      queryClient.invalidateQueries({ queryKey: ["team-users"] });
+      const targetUser = users.data?.find((u) => u.id === id);
+      writeAuditLog({
+        tenantId: tenantId!,
+        userId: user!.id,
+        action: "update",
+        entityType: "user",
+        entityId: id,
+        oldValues: { role: targetUser?.role },
+        newValues: { role: newRole },
+      });
+      toast({ title: "Permessi aggiornati" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
+  // KPI toggles
   const toggleRequiredMutation = useMutation({
     mutationFn: async ({ id, is_required }: { id: string; is_required: boolean }) => {
       const { error } = await supabase
@@ -468,7 +878,6 @@ export default function TeamPage() {
     },
   });
 
-  // Toggle is_active on a KPI definition
   const toggleKpiActiveMutation = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
       const { error } = await supabase
@@ -497,7 +906,7 @@ export default function TeamPage() {
     },
   });
 
-  // Approve join request
+  // Join request mutations
   const approveMutation = useMutation({
     mutationFn: async (request: JoinRequest) => {
       const { error: updateError } = await supabase
@@ -533,7 +942,6 @@ export default function TeamPage() {
     },
   });
 
-  // Reject join request
   const rejectMutation = useMutation({
     mutationFn: async (requestId: string) => {
       const { error } = await supabase
@@ -559,6 +967,8 @@ export default function TeamPage() {
     },
   });
 
+  // ── Handlers ─────────────────────────────────────────────────────────────
+
   const openEdit = (u: UserRow) => {
     setEditUser(u);
     setEditName(u.full_name);
@@ -576,6 +986,14 @@ export default function TeamPage() {
     return false;
   };
 
+  const handleInvAreaToggle = (areaId: string, checked: boolean) => {
+    setInvAreaIds((prev) =>
+      checked ? [...prev, areaId] : prev.filter((id) => id !== areaId)
+    );
+  };
+
+  // ── Render ───────────────────────────────────────────────────────────────
+
   return (
     <div className="space-y-section-gap">
       {/* Pending Join Requests Section */}
@@ -586,7 +1004,7 @@ export default function TeamPage() {
             {pendingRequests.map((req) => (
               <div
                 key={req.id}
-                className="flex items-center justify-between border border-border rounded-lg p-4"
+                className="flex items-center justify-between border border-border rounded-lg p-6"
               >
                 <div className="space-y-0.5">
                   <p className="text-sm font-medium">{req.full_name}</p>
@@ -637,15 +1055,141 @@ export default function TeamPage() {
         </Button>
       </div>
 
+      {/* Aree Funzionali management strip */}
+      {isOrgAdmin && (
+        <div className="flex items-center flex-wrap gap-2 p-6 border border-border rounded-lg bg-muted/30">
+          <span className="text-sm font-medium text-foreground mr-2">Aree Funzionali:</span>
+          {areas.map((area) => (
+            <span key={area.id}>
+              {editingAreaId === area.id ? (
+                <span className="inline-flex items-center gap-1">
+                  <Input
+                    value={editingAreaName}
+                    onChange={(e) => setEditingAreaName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && editingAreaName.trim()) {
+                        updateAreaMutation.mutate({ id: area.id, name: editingAreaName.trim() });
+                      }
+                      if (e.key === "Escape") setEditingAreaId(null);
+                    }}
+                    className="h-7 w-28 text-xs"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    className="rounded p-0.5 hover:bg-muted"
+                    onClick={() => {
+                      if (editingAreaName.trim()) {
+                        updateAreaMutation.mutate({ id: area.id, name: editingAreaName.trim() });
+                      }
+                    }}
+                  >
+                    <Check className="h-3.5 w-3.5 text-green-600" />
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded p-0.5 hover:bg-muted"
+                    onClick={() => setEditingAreaId(null)}
+                  >
+                    <X className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
+                </span>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="inline-flex items-center text-xs gap-1.5 cursor-pointer hover:bg-muted"
+                  onClick={() => {
+                    setEditingAreaId(area.id);
+                    setEditingAreaName(area.name);
+                  }}
+                >
+                  {area.name}
+                  <button
+                    type="button"
+                    className="ml-0.5 rounded-full hover:bg-red-100 p-0.5"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteAreaMutation.mutate(area.id);
+                    }}
+                  >
+                    <X className="h-2.5 w-2.5 text-muted-foreground hover:text-red-600" />
+                  </button>
+                </Badge>
+              )}
+            </span>
+          ))}
+          {addingArea ? (
+            <span className="inline-flex items-center gap-1">
+              <Input
+                value={newAreaName}
+                onChange={(e) => setNewAreaName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newAreaName.trim()) {
+                    createAreaMutation.mutate(newAreaName.trim());
+                  }
+                  if (e.key === "Escape") {
+                    setAddingArea(false);
+                    setNewAreaName("");
+                  }
+                }}
+                placeholder="Nome area..."
+                className="h-7 w-28 text-xs"
+                autoFocus
+              />
+              <button
+                type="button"
+                className="rounded p-0.5 hover:bg-muted"
+                onClick={() => {
+                  if (newAreaName.trim()) createAreaMutation.mutate(newAreaName.trim());
+                }}
+              >
+                <Check className="h-3.5 w-3.5 text-green-600" />
+              </button>
+              <button
+                type="button"
+                className="rounded p-0.5 hover:bg-muted"
+                onClick={() => {
+                  setAddingArea(false);
+                  setNewAreaName("");
+                }}
+              >
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="inline-flex items-center justify-center h-6 w-6 rounded-full border border-dashed border-border text-muted-foreground hover:bg-muted"
+              onClick={() => setAddingArea(true)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
-        <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Ruolo" />
+        <Select value={areaFilter} onValueChange={setAreaFilter}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Area Funzionale" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tutti i ruoli</SelectItem>
+            <SelectItem value="all">Tutte le aree</SelectItem>
+            {areas.map((a) => (
+              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={roleFilter} onValueChange={setRoleFilter}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Permessi" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tutti i permessi</SelectItem>
             <SelectItem value="org_admin">Org Admin</SelectItem>
+            <SelectItem value="information_officer">Info Officer</SelectItem>
             <SelectItem value="dirigente">Dirigente</SelectItem>
           </SelectContent>
         </Select>
@@ -673,8 +1217,8 @@ export default function TeamPage() {
         </div>
       </div>
 
-      {/* Accordion-style user list */}
-      {users.isLoading ? (
+      {/* Main User Table */}
+      {users.isLoading || functionalAreas.isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-12 w-full" />
@@ -691,8 +1235,10 @@ export default function TeamPage() {
               <TableRow className="bg-muted/50">
                 <TableHead className="w-8"></TableHead>
                 <TableHead>Nome</TableHead>
-                <TableHead>Ruolo</TableHead>
-                <TableHead className="hidden md:table-cell">Job Title</TableHead>
+                <TableHead className="hidden md:table-cell">Email</TableHead>
+                <TableHead>Ruolo Org</TableHead>
+                <TableHead>Permessi</TableHead>
+                <TableHead className="hidden lg:table-cell">Aree Funzionali</TableHead>
                 <TableHead>KPI</TableHead>
                 <TableHead>Stato</TableHead>
                 <TableHead className="w-28">Azioni</TableHead>
@@ -710,6 +1256,7 @@ export default function TeamPage() {
                 const visibleKpis = showHiddenKpis
                   ? userKpis
                   : userKpis.filter((k) => k.is_active);
+                const uAreaIds = userAreaMap[u.id] ?? [];
 
                 return (
                   <>
@@ -725,17 +1272,72 @@ export default function TeamPage() {
                           <ChevronRight className="h-4 w-4 text-muted-foreground" />
                         )}
                       </TableCell>
-                      <TableCell className="font-medium">{u.full_name}</TableCell>
-                      <TableCell>
-                        <Badge variant={rc.variant} className="inline-flex items-center text-xs">
-                          {rc.label}
-                        </Badge>
-                      </TableCell>
+                      <TableCell className="font-bold">{u.full_name}</TableCell>
                       <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                        {u.job_title ?? "\u2014"}
+                        {u.email}
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <InlineJobTitle
+                          value={u.job_title}
+                          userId={u.id}
+                          tenantId={tenantId!}
+                          currentUserId={user!.id}
+                          canEdit={isOrgAdmin}
+                        />
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        {isOrgAdmin && u.id !== user?.id ? (
+                          <Select
+                            value={u.role}
+                            onValueChange={(newRole) => {
+                              changeRoleMutation.mutate({ id: u.id, newRole });
+                            }}
+                          >
+                            <SelectTrigger className="h-7 w-32 text-xs border-0 bg-transparent p-0 shadow-none">
+                              <Badge
+                                variant={rc.variant}
+                                className={`inline-flex items-center text-xs ${rc.className ?? ""}`}
+                              >
+                                {rc.label}
+                              </Badge>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="org_admin">Org Admin</SelectItem>
+                              <SelectItem value="information_officer">Info Officer</SelectItem>
+                              <SelectItem value="dirigente">Dirigente</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Badge
+                            variant={rc.variant}
+                            className={`inline-flex items-center text-xs ${rc.className ?? ""}`}
+                          >
+                            {rc.label}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell" onClick={(e) => e.stopPropagation()}>
+                        <UserAreaBadges
+                          userId={u.id}
+                          tenantId={tenantId!}
+                          currentUserId={user!.id}
+                          userAreaIds={uAreaIds}
+                          allAreas={areas}
+                          canEdit={isOrgAdmin}
+                          onChanged={() => {
+                            queryClient.invalidateQueries({ queryKey: ["user-functional-areas"] });
+                          }}
+                        />
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="inline-flex items-center text-xs">
+                        <Badge
+                          variant="outline"
+                          className="inline-flex items-center text-xs cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setKpiUser({ id: u.id, name: u.full_name });
+                          }}
+                        >
                           {userKpiCount}
                         </Badge>
                       </TableCell>
@@ -744,6 +1346,15 @@ export default function TeamPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => openEdit(u)}
+                            title="Modifica utente"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -757,14 +1368,6 @@ export default function TeamPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={() => openEdit(u)}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
                             onClick={() =>
                               toggleActive.mutate({
                                 id: u.id,
@@ -772,6 +1375,7 @@ export default function TeamPage() {
                               })
                             }
                             disabled={u.id === user?.id}
+                            title={u.is_active ? "Disattiva" : "Attiva"}
                           >
                             <Power
                               className="h-3.5 w-3.5"
@@ -789,7 +1393,7 @@ export default function TeamPage() {
                     {/* Expanded KPI section */}
                     {isExpanded && (
                       <TableRow key={`${u.id}-kpis`}>
-                        <TableCell colSpan={7} className="p-0 bg-muted/20">
+                        <TableCell colSpan={9} className="p-0 bg-muted/20">
                           <div className="p-6">
                             {visibleKpis.length === 0 ? (
                               <p className="text-sm text-muted-foreground text-center py-4">
@@ -969,27 +1573,49 @@ export default function TeamPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="inv-title">Job Title</Label>
+              <Label htmlFor="inv-title">Ruolo Organizzativo (Job Title)</Label>
               <Input
                 id="inv-title"
                 value={invTitle}
                 onChange={(e) => setInvTitle(e.target.value)}
-                placeholder="Direttore Commerciale"
-                required
+                placeholder="es. CEO, CFO, Direttore Commerciale"
               />
             </div>
             <div className="space-y-2">
-              <Label>Ruolo</Label>
+              <Label>Permessi</Label>
               <Select value={invRole} onValueChange={setInvRole}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                 <SelectContent>
+                <SelectContent>
                   <SelectItem value="org_admin">Org Admin</SelectItem>
+                  <SelectItem value="information_officer">Info Officer</SelectItem>
                   <SelectItem value="dirigente">Dirigente</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {areas.length > 0 && (
+              <div className="space-y-2">
+                <Label>Aree Funzionali</Label>
+                <div className="grid gap-2 max-h-32 overflow-y-auto border border-border rounded-md p-3">
+                  {areas.map((area) => (
+                    <div key={area.id} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`inv-area-${area.id}`}
+                        checked={invAreaIds.includes(area.id)}
+                        onCheckedChange={(checked) => handleInvAreaToggle(area.id, checked === true)}
+                      />
+                      <Label
+                        htmlFor={`inv-area-${area.id}`}
+                        className="text-sm font-normal cursor-pointer"
+                      >
+                        {area.name}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <DialogFooter>
               <Button
                 type="button"
@@ -1003,8 +1629,7 @@ export default function TeamPage() {
                 disabled={
                   inviteMutation.isPending ||
                   !invEmail.trim() ||
-                  !invName.trim() ||
-                  !invTitle.trim()
+                  !invName.trim()
                 }
               >
                 {inviteMutation.isPending ? "Creazione..." : "Invita"}
@@ -1037,21 +1662,23 @@ export default function TeamPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-title">Job Title</Label>
+              <Label htmlFor="edit-title">Ruolo Organizzativo (Job Title)</Label>
               <Input
                 id="edit-title"
                 value={editTitle}
                 onChange={(e) => setEditTitle(e.target.value)}
+                placeholder="es. CEO, CFO, Direttore Commerciale"
               />
             </div>
             <div className="space-y-2">
-              <Label>Ruolo</Label>
+              <Label>Permessi</Label>
               <Select value={editRole} onValueChange={setEditRole}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="org_admin">Org Admin</SelectItem>
+                  <SelectItem value="information_officer">Info Officer</SelectItem>
                   <SelectItem value="dirigente">Dirigente</SelectItem>
                 </SelectContent>
               </Select>
