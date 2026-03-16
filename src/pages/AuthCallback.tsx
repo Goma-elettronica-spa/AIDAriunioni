@@ -9,67 +9,63 @@ export default function AuthCallback() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const handleCallback = async () => {
-      try {
-        // Exchange the code/token from the URL
-        const { data: { session }, error: sessionError } =
-          await supabase.auth.getSession();
-
-        if (sessionError || !session) {
-          setError("Sessione non valida. Riprova il login.");
-          return;
-        }
-
-        // Fetch user profile by auth id
-        let { data: profile, error: profileError } = await supabase
-          .from("users")
-          .select("id, role, tenant_id, full_name")
-          .eq("id", session.user.id)
-          .maybeSingle();
-
-        // If not found by id, try to find a pre-provisioned record by email
-        if (!profile && session.user.email) {
-          const { data: emailProfile } = await supabase
+    // Listen for the auth state change triggered by the URL hash/code
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === "SIGNED_IN" && session) {
+          // Fetch user profile
+          let { data: profile } = await supabase
             .from("users")
             .select("id, role, tenant_id, full_name")
-            .eq("email", session.user.email.toLowerCase())
+            .eq("id", session.user.id)
             .maybeSingle();
 
-          if (emailProfile && emailProfile.id !== session.user.id) {
-            // Reconcile: update the pre-provisioned record's id to match auth.users.id
-            const { error: updateError } = await supabase
+          // Try reconciliation by email if not found by id
+          if (!profile && session.user.email) {
+            const { data: emailProfile } = await supabase
               .from("users")
-              .update({ id: session.user.id })
-              .eq("id", emailProfile.id);
+              .select("id, role, tenant_id, full_name")
+              .eq("email", session.user.email.toLowerCase())
+              .maybeSingle();
 
-            if (!updateError) {
-              profile = { ...emailProfile, id: session.user.id };
-              profileError = null;
+            if (emailProfile && emailProfile.id !== session.user.id) {
+              const { error: updateError } = await supabase
+                .from("users")
+                .update({ id: session.user.id })
+                .eq("id", emailProfile.id);
+
+              if (!updateError) {
+                profile = { ...emailProfile, id: session.user.id };
+              }
+            } else if (emailProfile) {
+              profile = emailProfile;
             }
-          } else if (emailProfile) {
-            profile = emailProfile;
-            profileError = null;
+          }
+
+          if (!profile) {
+            setError("Account non autorizzato");
+            await supabase.auth.signOut();
+            return;
+          }
+
+          if (profile.role === "superadmin") {
+            navigate("/superadmin/dashboard", { replace: true });
+          } else {
+            navigate("/dashboard", { replace: true });
           }
         }
-
-        if (profileError || !profile) {
-          setError("Account non autorizzato");
-          await supabase.auth.signOut();
-          return;
-        }
-
-        // Redirect by role
-        if (profile.role === "superadmin") {
-          navigate("/superadmin/dashboard", { replace: true });
-        } else {
-          navigate("/dashboard", { replace: true });
-        }
-      } catch {
-        setError("Errore durante l'autenticazione");
       }
-    };
+    );
 
-    handleCallback();
+    // Fallback timeout in case no auth event fires
+    const timeout = setTimeout(() => {
+      setError("Sessione non valida. Riprova il login.");
+    }, 10000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, [navigate]);
 
   if (error) {
