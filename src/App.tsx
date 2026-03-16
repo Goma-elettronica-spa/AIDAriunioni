@@ -16,6 +16,7 @@ import SuperadminLayout from "@/layouts/SuperadminLayout";
 import SuperadminDashboard from "@/pages/superadmin/Dashboard";
 import Tenants from "@/pages/superadmin/Tenants";
 import TenantDetail from "@/pages/superadmin/TenantDetail";
+import PermissionsPage from "@/pages/superadmin/Permissions";
 
 import AppLayout from "@/layouts/AppLayout";
 import DashboardPage from "@/pages/app/DashboardPage";
