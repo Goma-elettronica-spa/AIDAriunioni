@@ -362,9 +362,10 @@ export default function Login() {
     }
 
     setSuccess(true);
-    if (result?.status === "auto_approved") {
+    const resultObj = result as Record<string, unknown> | null;
+    if (resultObj?.status === "auto_approved") {
       setSuccessMessage("Accesso approvato! Effettua il login.");
-    } else if (result?.status === "pending") {
+    } else if (resultObj?.status === "pending") {
       setSuccessMessage("Richiesta inviata! L'amministratore della tua organizzazione approvera' il tuo accesso.");
     } else {
       setSuccessMessage("Registrazione completata! Controlla la tua email per confermare.");
