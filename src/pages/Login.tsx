@@ -705,35 +705,6 @@ export default function Login() {
             </div>
           )}
 
-          {/* ==================== MAGIC LINK VIEW ==================== */}
-          {view === "magic-link" && (
-            <form onSubmit={handleMagicLink} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="magic-email">Email</Label>
-                <Input
-                  id="magic-email"
-                  type="email"
-                  placeholder="email@azienda.it"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={loading}
-                  className="h-10"
-                />
-              </div>
-              <Button
-                type="submit"
-                className="w-full h-10"
-                disabled={loading || !email.trim()}
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Invia Magic Link"
-                )}
-              </Button>
-            </form>
-          )}
 
           {/* ==================== FORGOT PASSWORD VIEW ==================== */}
           {view === "forgot-password" && (
