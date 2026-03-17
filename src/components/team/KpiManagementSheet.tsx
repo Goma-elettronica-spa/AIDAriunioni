@@ -97,16 +97,21 @@ export default function KpiManagementSheet({
   const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
 
   const kpis = useQuery({
-    queryKey: ["kpi-definitions", areaId, tenantId],
-    enabled: !!areaId && !!tenantId && open,
+    queryKey: ["kpi-definitions", areaId ?? "__company__", tenantId],
+    enabled: !!tenantId && open,
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("kpi_definitions")
         .select("*")
-        .eq("functional_area_id", areaId)
         .eq("tenant_id", tenantId)
         .eq("is_active", true)
         .order("created_at", { ascending: true });
+      if (areaId) {
+        q = q.eq("functional_area_id", areaId);
+      } else {
+        q = q.is("functional_area_id", null);
+      }
+      const { data, error } = await q;
       if (error) throw error;
       return data as KpiRow[];
     },
