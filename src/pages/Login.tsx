@@ -13,10 +13,8 @@ import { useAuth } from "@/contexts/AuthContext";
 type View = "login" | "register" | "forgot-password";
 
 function translateError(message: string): string {
-  if (message.includes("Email rate limit exceeded")) {
-    return "rate_limit";
-  }
-  if (message.includes("Too many requests")) {
+  const lower = message.toLowerCase();
+  if (lower.includes("email rate limit exceeded") || lower.includes("rate limit") || lower.includes("too many requests")) {
     return "rate_limit";
   }
   if (message.includes("Invalid login credentials")) {
