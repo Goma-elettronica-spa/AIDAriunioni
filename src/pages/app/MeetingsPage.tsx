@@ -30,11 +30,12 @@ import { writeAuditLog } from "@/lib/audit";
 const statusConfig: Record<string, { label: string; dotClass: string; order: number }> = {
   draft: { label: "Bozza", dotClass: "bg-[hsl(var(--status-todo))]", order: 0 },
   pre_meeting: { label: "Prevista", dotClass: "bg-[hsl(var(--status-waiting))]", order: 1 },
-  in_progress: { label: "In Corso", dotClass: "bg-[hsl(var(--status-wip))]", order: 2 },
-  completed: { label: "Conclusa", dotClass: "bg-gray-700", order: 3 },
+  open: { label: "Aperta", dotClass: "bg-[hsl(var(--status-done))]", order: 2 },
+  in_progress: { label: "In Corso", dotClass: "bg-[hsl(var(--status-wip))]", order: 3 },
+  completed: { label: "Conclusa", dotClass: "bg-gray-700", order: 4 },
 };
 
-const statusFlow = ["draft", "pre_meeting", "in_progress", "completed"];
+const statusFlow = ["draft", "pre_meeting", "open", "in_progress", "completed"];
 
 function getQuarter(date: Date): string {
   const q = Math.ceil((date.getMonth() + 1) / 3);
@@ -61,7 +62,16 @@ function getDisplayStatus(meeting: { status: string; scheduled_date: string; pre
     return "in_progress";
   }
 
-  // Data odierna < data riunione → Prevista
+  // Data odierna >= data apertura upload AND < data riunione → Aperta
+  if (meeting.pre_meeting_deadline) {
+    const opening = new Date(meeting.pre_meeting_deadline);
+    opening.setHours(0, 0, 0, 0);
+    if (today >= opening) {
+      return "open";
+    }
+  }
+
+  // Data odierna < data apertura → Prevista
   return "pre_meeting";
 }
 
