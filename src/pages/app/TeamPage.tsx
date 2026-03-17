@@ -978,8 +978,8 @@ export default function TeamPage() {
       setInvRole("dirigente");
       setInvAreaIds([]);
       toast({
-        title: "Invito inviato",
-        description: `Invito inviato a ${email}. L'utente ricevera' un'email per accedere.`,
+        title: "Utente aggiunto",
+        description: `${invName.trim()} è stato pre-registrato. Quando si registrerà e farà login, sarà riconosciuto automaticamente.`,
       });
     },
     onError: (err: Error) => {
