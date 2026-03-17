@@ -30,11 +30,12 @@ import { writeAuditLog } from "@/lib/audit";
 const statusConfig: Record<string, { label: string; dotClass: string; order: number }> = {
   draft: { label: "Bozza", dotClass: "bg-[hsl(var(--status-todo))]", order: 0 },
   pre_meeting: { label: "Prevista", dotClass: "bg-[hsl(var(--status-waiting))]", order: 1 },
-  in_progress: { label: "In Corso", dotClass: "bg-[hsl(var(--status-wip))]", order: 2 },
-  completed: { label: "Conclusa", dotClass: "bg-gray-700", order: 3 },
+  open: { label: "Aperta", dotClass: "bg-[hsl(var(--status-done))]", order: 2 },
+  in_progress: { label: "In Corso", dotClass: "bg-[hsl(var(--status-wip))]", order: 3 },
+  completed: { label: "Conclusa", dotClass: "bg-gray-700", order: 4 },
 };
 
-const statusFlow = ["draft", "pre_meeting", "in_progress", "completed"];
+const statusFlow = ["draft", "pre_meeting", "open", "in_progress", "completed"];
 
 function getQuarter(date: Date): string {
   const q = Math.ceil((date.getMonth() + 1) / 3);
@@ -61,7 +62,16 @@ function getDisplayStatus(meeting: { status: string; scheduled_date: string; pre
     return "in_progress";
   }
 
-  // Data odierna < data riunione → Prevista
+  // Data odierna >= data apertura upload AND < data riunione → Aperta
+  if (meeting.pre_meeting_deadline) {
+    const opening = new Date(meeting.pre_meeting_deadline);
+    opening.setHours(0, 0, 0, 0);
+    if (today >= opening) {
+      return "open";
+    }
+  }
+
+  // Data odierna < data apertura → Prevista
   return "pre_meeting";
 }
 
@@ -250,7 +260,8 @@ export default function MeetingsPage() {
           <SelectContent>
             <SelectItem value="all">Tutti</SelectItem>
             <SelectItem value="draft">Bozza</SelectItem>
-            <SelectItem value="pre_meeting">Pre-Meeting</SelectItem>
+            <SelectItem value="pre_meeting">Prevista</SelectItem>
+            <SelectItem value="open">Aperta</SelectItem>
             <SelectItem value="in_progress">In Corso</SelectItem>
             <SelectItem value="completed">Conclusa</SelectItem>
           </SelectContent>
@@ -340,11 +351,10 @@ export default function MeetingsPage() {
                             locale: it,
                           })}
                         </span>
-                        {(m.status === "draft" || m.status === "pre_meeting") &&
-                          m.pre_meeting_deadline &&
+                        {m.pre_meeting_deadline &&
                           !isPast && (
                             <span>
-                              Deadline:{" "}
+                              Apertura upload:{" "}
                               {format(
                                 new Date(m.pre_meeting_deadline),
                                 "d MMM",
@@ -445,7 +455,7 @@ export default function MeetingsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Deadline Pre-Meeting</Label>
+              <Label>Data Apertura Upload</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -458,7 +468,7 @@ export default function MeetingsPage() {
                     <CalendarIcon className="h-4 w-4 mr-2" />
                     {deadline
                       ? format(deadline, "PPP", { locale: it })
-                      : "Seleziona deadline"}
+                      : "Seleziona data"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">

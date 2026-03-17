@@ -29,10 +29,11 @@ import { KpiTab } from "@/components/meeting-detail/KpiTab";
 const statusConfig: Record<string, { label: string; dotClass: string }> = {
   draft: { label: "Bozza", dotClass: "bg-[hsl(var(--status-todo))]" },
   pre_meeting: { label: "Prevista", dotClass: "bg-[hsl(var(--status-waiting))]" },
+  open: { label: "Aperta", dotClass: "bg-[hsl(var(--status-done))]" },
   in_progress: { label: "In Corso", dotClass: "bg-[hsl(var(--status-wip))]" },
   completed: { label: "Conclusa", dotClass: "bg-gray-700" },
 };
-const statusFlow = ["draft", "pre_meeting", "in_progress", "completed"];
+const statusFlow = ["draft", "pre_meeting", "open", "in_progress", "completed"];
 
 interface GateStatus {
   hasSlideUpload: boolean;
@@ -230,7 +231,15 @@ export default function MeetingDetailPage() {
   scheduled.setHours(0, 0, 0, 0);
   const isToday = today.getTime() === scheduled.getTime();
   const isPast = today > scheduled;
-  const displayStatus = isPast ? "completed" : isToday ? "in_progress" : "pre_meeting";
+  let displayStatus = isPast ? "completed" : isToday ? "in_progress" : "pre_meeting";
+  // If today >= opening date and before meeting → "open"
+  if (displayStatus === "pre_meeting" && m.pre_meeting_deadline) {
+    const opening = new Date(m.pre_meeting_deadline);
+    opening.setHours(0, 0, 0, 0);
+    if (today >= opening) {
+      displayStatus = "open";
+    }
+  }
   const sc = statusConfig[displayStatus] ?? statusConfig.draft;
   const nextIdx = statusFlow.indexOf(m.status) + 1;
   const nextStatus = nextIdx < statusFlow.length ? statusFlow[nextIdx] : null;
@@ -417,7 +426,7 @@ export default function MeetingDetailPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-deadline">Deadline Pre-Meeting</Label>
+              <Label htmlFor="edit-deadline">Data Apertura Upload</Label>
               <Input
                 id="edit-deadline"
                 type="date"

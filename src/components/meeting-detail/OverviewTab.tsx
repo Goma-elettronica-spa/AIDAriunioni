@@ -304,7 +304,7 @@ export function OverviewTab({ meeting, isAdmin }: Props) {
               <p className="font-medium font-mono text-foreground">{meeting.quarter}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">Deadline Pre-Meeting</p>
+              <p className="text-muted-foreground">Apertura Upload</p>
               <p className="font-medium text-foreground">
                 {new Date(meeting.pre_meeting_deadline).toLocaleDateString("it-IT", {
                   day: "2-digit",
