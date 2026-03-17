@@ -73,16 +73,29 @@ export default function DashboardPage() {
     queryKey: ["dashboard-next-meeting", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
+      const today = new Date().toISOString().split("T")[0];
+      // First try: next meeting from today onwards
       const { data, error } = await supabase
         .from("meetings")
         .select("id, title, scheduled_date, status, pre_meeting_deadline")
         .eq("tenant_id", tenantId!)
-        .neq("status", "completed")
+        .gte("scheduled_date", today)
         .order("scheduled_date", { ascending: true })
         .limit(1)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      if (data) return data;
+      // Fallback: most recent non-completed meeting
+      const { data: fallback, error: fbErr } = await supabase
+        .from("meetings")
+        .select("id, title, scheduled_date, status, pre_meeting_deadline")
+        .eq("tenant_id", tenantId!)
+        .neq("status", "completed")
+        .order("scheduled_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (fbErr) throw fbErr;
+      return fallback;
     },
   });
 
@@ -701,7 +714,7 @@ export default function DashboardPage() {
                       </span>
                     </span>
                     <span>
-                      Deadline pre-meeting:{" "}
+                      Data Apertura Upload:{" "}
                       <span className="text-foreground font-medium">
                         {new Date(meeting.pre_meeting_deadline).toLocaleDateString(
                           "it-IT",
