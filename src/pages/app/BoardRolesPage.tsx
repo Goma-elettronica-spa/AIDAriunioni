@@ -578,30 +578,28 @@ export default function BoardRolesPage() {
                     <td className="py-2 px-4 align-middle">
                       <div className="flex items-center justify-end gap-2">
                         {/* Assign / reassign dropdown */}
-                        {!assignedUser && (
-                          <Select
-                            value=""
-                            onValueChange={(val) => {
-                              if (val && val !== "__cancel__") {
-                                handleAssign(row.role.id, val);
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="w-40 h-7 text-xs">
-                              <SelectValue placeholder="Assegna..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__cancel__">Annulla</SelectItem>
-                              {users
-                                .filter((u) => u.id !== assignedUser?.id)
-                                .map((u) => (
-                                  <SelectItem key={u.id} value={u.id}>
-                                    {u.full_name}
-                                  </SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
-                        )}
+                        <Select
+                          value=""
+                          onValueChange={(val) => {
+                            if (val && val !== "__cancel__") {
+                              handleAssign(row.role.id, val);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="w-40 h-7 text-xs">
+                            <SelectValue placeholder={assignedUser ? "Riassegna..." : "Assegna..."} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__cancel__">Annulla</SelectItem>
+                            {users
+                              .filter((u) => u.id !== assignedUser?.id)
+                              .map((u) => (
+                                <SelectItem key={u.id} value={u.id}>
+                                  {u.full_name}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
 
                         {/* Edit role */}
                         <Button
