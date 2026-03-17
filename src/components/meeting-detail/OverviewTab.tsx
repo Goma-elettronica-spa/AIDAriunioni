@@ -553,3 +553,6 @@ export function OverviewTab({ meeting, isAdmin }: Props) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
