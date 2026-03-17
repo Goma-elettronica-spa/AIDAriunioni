@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { writeAuditLog } from "@/lib/audit";
-import { Plus, Pencil, X } from "lucide-react";
+import { Plus, Pencil, X, Trash2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -75,6 +79,10 @@ export default function BoardRolesPage() {
 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [roleToDelete, setRoleToDelete] = useState<BoardRole | null>(null);
+
+  const [areaDeleteConfirmOpen, setAreaDeleteConfirmOpen] = useState(false);
+  const [areaToDelete, setAreaToDelete] = useState<FunctionalArea | null>(null);
+  const [areaKpiCount, setAreaKpiCount] = useState(0);
 
   // ── Queries ───────────────────────────────────────────────────────────────
 
@@ -206,6 +214,22 @@ export default function BoardRolesPage() {
 
   const deleteAreaMutation = useMutation({
     mutationFn: async (id: string) => {
+      try {
+        // Nullify functional_area_id on KPIs that reference this area
+        await supabase
+          .from("kpi_definitions")
+          .update({ functional_area_id: null })
+          .eq("functional_area_id", id);
+
+        // Remove user_functional_areas entries for this area
+        await (supabase.from as any)("user_functional_areas")
+          .delete()
+          .eq("functional_area_id", id);
+      } catch (_) {
+        // These may not exist or may fail — continue with area deletion
+        console.warn("Cleanup before area delete had non-critical errors");
+      }
+
       const { error } = await (supabase.from as any)("functional_areas")
         .delete()
         .eq("id", id);
@@ -213,6 +237,7 @@ export default function BoardRolesPage() {
     },
     onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ["board-roles-areas"] });
+      queryClient.invalidateQueries({ queryKey: ["board-roles-roles"] });
       writeAuditLog({
         tenantId: tenantId!,
         userId: user!.id,
@@ -220,10 +245,12 @@ export default function BoardRolesPage() {
         entityType: "functional_area",
         entityId: id,
       });
+      setAreaDeleteConfirmOpen(false);
+      setAreaToDelete(null);
       toast({ title: "Area eliminata" });
     },
     onError: (err: any) => {
-      toast({ title: "Errore", description: err.message, variant: "destructive" });
+      toast({ title: "Errore nell'eliminazione dell'area", description: err.message, variant: "destructive" });
     },
   });
 
@@ -378,6 +405,22 @@ export default function BoardRolesPage() {
     setRoleDialogOpen(true);
   };
 
+  const handleDeleteArea = async (area: FunctionalArea) => {
+    try {
+      // Check how many KPIs reference this area
+      const { count, error } = await supabase
+        .from("kpi_definitions")
+        .select("id", { count: "exact", head: true })
+        .eq("functional_area_id", area.id);
+      if (error) throw error;
+      setAreaToDelete(area);
+      setAreaKpiCount(count ?? 0);
+      setAreaDeleteConfirmOpen(true);
+    } catch (err: any) {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    }
+  };
+
   const handleDeleteRole = (role: BoardRole) => {
     setRoleToDelete(role);
     setDeleteConfirmOpen(true);
@@ -478,6 +521,14 @@ export default function BoardRolesPage() {
                                 title="Modifica area"
                               >
                                 <Pencil className="h-3 w-3 text-muted-foreground" />
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded p-0.5 hover:bg-destructive/10"
+                                onClick={() => handleDeleteArea(area)}
+                                title="Elimina area"
+                              >
+                                <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
                               </button>
                             </div>
                           )}
@@ -748,6 +799,32 @@ export default function BoardRolesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Delete Area Confirmation ───────────────────────────────────────── */}
+      <AlertDialog open={areaDeleteConfirmOpen} onOpenChange={setAreaDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Eliminare l'area "{areaToDelete?.name}"?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {areaKpiCount > 0
+                ? `Questa area ha ${areaKpiCount} KPI assegnate. Eliminando l'area, le KPI rimarranno senza area. Continuare?`
+                : "Questa azione è irreversibile. L'area funzionale verrà eliminata definitivamente."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => areaToDelete && deleteAreaMutation.mutate(areaToDelete.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteAreaMutation.isPending ? "Eliminazione..." : "Elimina"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

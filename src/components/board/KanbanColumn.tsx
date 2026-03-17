@@ -10,6 +10,7 @@ interface KanbanColumnProps {
   currentUserId?: string;
   onTaskClick?: (task: BoardTask) => void;
   subtaskProgressMap?: Map<string, { done: number; total: number }>;
+  activeTaskId?: string | null;
 }
 
 export function KanbanColumn({
@@ -19,6 +20,7 @@ export function KanbanColumn({
   currentUserId,
   onTaskClick,
   subtaskProgressMap,
+  activeTaskId,
 }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
@@ -48,6 +50,7 @@ export function KanbanColumn({
             key={task.id}
             task={task}
             canDrag={canDragAny || task.owner_user_id === currentUserId}
+            isBeingDragged={activeTaskId === task.id}
             onClick={onTaskClick}
             subtaskProgress={subtaskProgressMap?.get(task.id) ?? null}
           />

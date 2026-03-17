@@ -23,11 +23,12 @@ interface TaskCardProps {
   task: BoardTask;
   canDrag?: boolean;
   isDragging?: boolean;
+  isBeingDragged?: boolean;
   onClick?: (task: BoardTask) => void;
   subtaskProgress?: { done: number; total: number } | null;
 }
 
-export function TaskCard({ task, canDrag = false, isDragging = false, onClick, subtaskProgress }: TaskCardProps) {
+export function TaskCard({ task, canDrag = false, isDragging = false, isBeingDragged = false, onClick, subtaskProgress }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: task.id,
     disabled: !canDrag,
@@ -59,7 +60,7 @@ export function TaskCard({ task, canDrag = false, isDragging = false, onClick, s
       {...(canDrag ? { ...listeners, ...attributes } : {})}
       className={`bg-background border border-border rounded-lg p-3.5 space-y-2.5 transition-shadow cursor-pointer ${
         canDrag ? "active:cursor-grabbing" : ""
-      } ${isDragging ? "shadow-lg opacity-90 rotate-1" : "hover:shadow-sm"}`}
+      } ${isDragging ? "shadow-lg opacity-90 rotate-1" : "hover:shadow-sm"} ${isBeingDragged ? "opacity-0" : ""}`}
       onClick={() => onClick?.(task)}
     >
       {/* Title */}

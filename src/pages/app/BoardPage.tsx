@@ -12,7 +12,7 @@ import {
   type DragStartEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Plus, Sparkles, User, Trash2 } from "lucide-react";
+import { Plus, Sparkles, User, Trash2, X as XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -374,6 +374,25 @@ export default function BoardPage() {
     },
   });
 
+  // Delete subtask mutation
+  const deleteSubtaskMutation = useMutation({
+    mutationFn: async (subtaskId: string) => {
+      const { error } = await supabase
+        .from("board_tasks")
+        .delete()
+        .eq("id", subtaskId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["board-subtasks"] });
+      queryClient.invalidateQueries({ queryKey: ["board-tasks"] });
+      toast({ title: "Sotto-task eliminato" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
   // Delete task mutation
   const deleteTaskMutation = useMutation({
     mutationFn: async (taskId: string) => {
@@ -574,6 +593,7 @@ export default function BoardPage() {
                 currentUserId={user?.id}
                 onTaskClick={openTaskDetail}
                 subtaskProgressMap={subtaskProgressMap}
+                activeTaskId={activeTask?.id}
               />
             ))}
           </div>
@@ -783,7 +803,7 @@ export default function BoardPage() {
                 {subtaskList.length > 0 && (
                   <div className="space-y-1.5">
                     {subtaskList.map((sub) => (
-                      <div key={sub.id} className="flex items-center gap-2 p-6 border border-border rounded-md">
+                      <div key={sub.id} className="flex items-center gap-2 p-2 border border-border rounded-md">
                         <Checkbox
                           checked={sub.status === "done"}
                           onCheckedChange={() =>
@@ -797,6 +817,16 @@ export default function BoardPage() {
                         >
                           {sub.title}
                         </span>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            className="rounded p-0.5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive shrink-0"
+                            title="Elimina sotto-task"
+                            onClick={() => deleteSubtaskMutation.mutate(sub.id)}
+                          >
+                            <XIcon className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>

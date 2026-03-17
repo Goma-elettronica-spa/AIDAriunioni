@@ -97,12 +97,18 @@ function ownerColor(userId: string): string {
   return `hsl(${hue}, 55%, 45%)`;
 }
 
-function formatValue(amount: number, unit: string): string {
+function formatValue(amount: number, unit: string, unitLabel?: string): string {
   const fmt = amount.toLocaleString("it-IT", { maximumFractionDigits: 0 });
+  if (unitLabel) return `${fmt} ${unitLabel}`;
   if (unit === "money") return `\u20AC${fmt}`;
   if (unit === "license_cost") return `\u20AC${fmt}/anno`;
   if (unit === "man_hours") return `${fmt} ore`;
   return `${fmt} ${unit}`;
+}
+
+function getUnitLabel(unit: string, unitOptions: { value: string; label: string }[]): string {
+  const opt = unitOptions.find((o) => o.value === unit);
+  return opt?.label ?? unit;
 }
 
 const reasonLabels: Record<string, string> = {
@@ -125,12 +131,16 @@ function UpgradeCardComponent({
   card,
   canDrag = false,
   isDragging = false,
+  isBeingDragged = false,
   onClick,
+  unitOptions = [],
 }: {
   card: UpgradeCard;
   canDrag?: boolean;
   isDragging?: boolean;
+  isBeingDragged?: boolean;
   onClick?: (c: UpgradeCard) => void;
+  unitOptions?: { value: string; label: string }[];
 }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: card.id,
@@ -158,7 +168,7 @@ function UpgradeCardComponent({
       {...(canDrag ? { ...listeners, ...attributes } : {})}
       className={`bg-background border border-border rounded-lg p-3.5 space-y-2.5 transition-shadow cursor-pointer ${
         canDrag ? "active:cursor-grabbing" : ""
-      } ${isDragging ? "shadow-lg opacity-90 rotate-1" : "hover:shadow-sm"}`}
+      } ${isDragging ? "shadow-lg opacity-90 rotate-1" : "hover:shadow-sm"} ${isBeingDragged ? "opacity-0" : ""}`}
       onClick={() => onClick?.(card)}
     >
       {/* Title */}
@@ -209,22 +219,27 @@ function UpgradeCardComponent({
         )}
       </div>
 
-      {/* Valore aggiunto */}
-      {hasReview ? (
-        <div className="space-y-0.5">
-          <p className="text-xs text-muted-foreground line-through">
+      {/* Valore aggiunto — always show value with unit badge */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {hasReview ? (
+          <div className="space-y-0.5">
+            <p className="text-xs text-muted-foreground line-through">
+              {formatValue(card.value_amount, card.value_unit)}
+            </p>
+            <p className="text-xs font-bold text-foreground">
+              {formatValue(card.reviewed_value_amount!, card.reviewed_value_unit ?? card.value_unit)}{" "}
+              <span className="font-normal text-muted-foreground">(rivisto)</span>
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs font-semibold text-foreground">
             {formatValue(card.value_amount, card.value_unit)}
           </p>
-          <p className="text-xs font-bold text-foreground">
-            {formatValue(card.reviewed_value_amount!, card.reviewed_value_unit ?? card.value_unit)}{" "}
-            <span className="font-normal text-muted-foreground">(rivisto)</span>
-          </p>
-        </div>
-      ) : (
-        <p className="text-xs font-semibold text-foreground">
-          {formatValue(card.value_amount, card.value_unit)}
-        </p>
-      )}
+        )}
+        <Badge variant="outline" className="inline-flex items-center text-[10px] font-normal py-0 bg-muted/50">
+          {getUnitLabel(hasReview ? (card.reviewed_value_unit ?? card.value_unit) : card.value_unit, unitOptions)}
+        </Badge>
+      </div>
 
       {/* Description */}
       {card.description && (
@@ -243,12 +258,16 @@ function UpgradeKanbanColumn({
   canDragAny,
   currentUserId,
   onCardClick,
+  activeCardId,
+  unitOptions = [],
 }: {
   column: (typeof columns)[number];
   cards: UpgradeCard[];
   canDragAny: boolean;
   currentUserId?: string;
   onCardClick?: (c: UpgradeCard) => void;
+  activeCardId?: string | null;
+  unitOptions?: { value: string; label: string }[];
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
@@ -281,7 +300,9 @@ function UpgradeKanbanColumn({
             key={card.id}
             card={card}
             canDrag={canDragAny || card.owner_user_id === currentUserId}
+            isBeingDragged={activeCardId === card.id}
             onClick={onCardClick}
+            unitOptions={unitOptions}
           />
         ))}
         {cards.length === 0 && (
@@ -914,13 +935,15 @@ Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
                 canDragAny={canDragAny}
                 currentUserId={user?.id}
                 onCardClick={openCardDetail}
+                activeCardId={activeCard?.id}
+                unitOptions={unitSelectOptions}
               />
             ))}
           </div>
 
           <DragOverlay>
             {activeCard && (
-              <UpgradeCardComponent card={activeCard} isDragging />
+              <UpgradeCardComponent card={activeCard} isDragging unitOptions={unitSelectOptions} />
             )}
           </DragOverlay>
         </DndContext>

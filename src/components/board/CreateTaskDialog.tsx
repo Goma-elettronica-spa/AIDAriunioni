@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -7,8 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -50,6 +50,7 @@ export function CreateTaskDialog({ open, onOpenChange, tenantId, currentUserId, 
   const [deadlineType, setDeadlineType] = useState("next_meeting");
   const [linkedKpi, setLinkedKpi] = useState("none");
   const [customDate, setCustomDate] = useState("");
+  const [areaFilter, setAreaFilter] = useState("all");
 
   useEffect(() => {
     if (open) {
@@ -59,24 +60,51 @@ export function CreateTaskDialog({ open, onOpenChange, tenantId, currentUserId, 
       setDeadlineType("next_meeting");
       setLinkedKpi("none");
       setCustomDate("");
+      setAreaFilter("all");
     }
   }, [open, currentUserId]);
 
-  // Fetch KPIs for selected owner
-  const kpis = useQuery({
-    queryKey: ["board-kpis", tenantId, ownerId],
-    enabled: !!tenantId && !!ownerId && open,
+  // Fetch functional areas for tenant
+  const functionalAreas = useQuery({
+    queryKey: ["create-task-areas", tenantId],
+    enabled: !!tenantId && open,
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("functional_areas")
+        .select("id, name")
+        .eq("tenant_id", tenantId)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as { id: string; name: string }[];
+    },
+  });
+
+  // Fetch all KPIs for tenant
+  const allKpis = useQuery({
+    queryKey: ["create-task-kpis", tenantId],
+    enabled: !!tenantId && open,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("kpi_definitions")
-        .select("id, name")
+        .select("id, name, functional_area_id, functional_areas(name)")
         .eq("tenant_id", tenantId)
-        .eq("user_id", ownerId)
-        .eq("is_active", true);
+        .eq("is_active", true)
+        .order("name");
       if (error) throw error;
-      return data;
+      return (data ?? []).map((k: any) => ({
+        id: k.id as string,
+        name: k.name as string,
+        functional_area_id: k.functional_area_id as string | null,
+        area_name: (k.functional_areas as any)?.name ?? null,
+      }));
     },
   });
+
+  // Filter KPIs by selected area
+  const filteredKpis = useMemo(() => {
+    if (!allKpis.data) return [];
+    if (areaFilter === "all") return allKpis.data;
+    return allKpis.data.filter((k) => k.functional_area_id === areaFilter);
+  }, [allKpis.data, areaFilter]);
 
   // Fetch next meeting for deadline calc
   const nextMeeting = useQuery({
@@ -142,17 +170,17 @@ export function CreateTaskDialog({ open, onOpenChange, tenantId, currentUserId, 
   const nextQuarterEndLabel = getNextQuarterEnd(new Date());
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Nuovo Task</DialogTitle>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-[400px] sm:w-[500px] overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Nuovo Task</SheetTitle>
+        </SheetHeader>
         <form
           onSubmit={(e) => {
             e.preventDefault();
             createMutation.mutate();
           }}
-          className="space-y-4"
+          className="space-y-4 mt-6"
         >
           <div className="space-y-2">
             <Label htmlFor="task-title">Titolo</Label>
@@ -185,6 +213,42 @@ export function CreateTaskDialog({ open, onOpenChange, tenantId, currentUserId, 
               <SelectContent>
                 {users.map((u) => (
                   <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Area Funzionale filter */}
+          <div className="space-y-2">
+            <Label>Area Funzionale</Label>
+            <Select value={areaFilter} onValueChange={(v) => { setAreaFilter(v); setLinkedKpi("none"); }}>
+              <SelectTrigger>
+                <SelectValue placeholder="Tutte le aree" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutte le aree</SelectItem>
+                {functionalAreas.data?.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Collega a KPI (filtered by area) */}
+          <div className="space-y-2">
+            <Label>Collega a KPI</Label>
+            <Select value={linkedKpi} onValueChange={setLinkedKpi}>
+              <SelectTrigger>
+                <SelectValue placeholder="Nessuno" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Nessuno</SelectItem>
+                {filteredKpis.map((k) => (
+                  <SelectItem key={k.id} value={k.id}>
+                    {k.area_name ? `${k.area_name}: ${k.name}` : k.name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -240,36 +304,20 @@ export function CreateTaskDialog({ open, onOpenChange, tenantId, currentUserId, 
             )}
           </div>
 
-          {(kpis.data?.length ?? 0) > 0 && (
-            <div className="space-y-2">
-              <Label>Collega a KPI</Label>
-              <Select value={linkedKpi} onValueChange={setLinkedKpi}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Nessuno" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nessuno</SelectItem>
-                  {kpis.data?.map((k) => (
-                    <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <div className="flex gap-2 pt-2">
+            <Button type="button" variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
               Annulla
             </Button>
             <Button
               type="submit"
+              className="flex-1"
               disabled={createMutation.isPending || !title.trim() || (deadlineType === "custom" && !customDate)}
             >
               {createMutation.isPending ? "Creazione..." : "Crea Task"}
             </Button>
-          </DialogFooter>
+          </div>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
