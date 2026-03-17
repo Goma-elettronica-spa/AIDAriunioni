@@ -260,7 +260,8 @@ export default function MeetingsPage() {
           <SelectContent>
             <SelectItem value="all">Tutti</SelectItem>
             <SelectItem value="draft">Bozza</SelectItem>
-            <SelectItem value="pre_meeting">Pre-Meeting</SelectItem>
+            <SelectItem value="pre_meeting">Prevista</SelectItem>
+            <SelectItem value="open">Aperta</SelectItem>
             <SelectItem value="in_progress">In Corso</SelectItem>
             <SelectItem value="completed">Conclusa</SelectItem>
           </SelectContent>
