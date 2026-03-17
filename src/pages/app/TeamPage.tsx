@@ -1188,11 +1188,7 @@ export default function TeamPage() {
     return false;
   };
 
-  const handleInvAreaToggle = (areaId: string, checked: boolean) => {
-    setInvAreaIds((prev) =>
-      checked ? [...prev, areaId] : prev.filter((id) => id !== areaId)
-    );
-  };
+  // Removed: handleInvAreaToggle (single area now)
 
   // ── Render ───────────────────────────────────────────────────────────────
 
