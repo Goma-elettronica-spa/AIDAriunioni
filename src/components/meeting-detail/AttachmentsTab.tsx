@@ -268,7 +268,7 @@ export function AttachmentsTab({ meeting }: Props) {
         id: u.id,
         fullName: u.full_name,
         jobTitle: u.job_title,
-        files: userSlides.get(u.id) ?? [],
+        files: areaUserSlides.get(`${area.id}:${u.id}`) ?? [],
       })),
     });
   }
