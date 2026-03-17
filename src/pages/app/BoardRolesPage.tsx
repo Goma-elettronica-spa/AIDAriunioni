@@ -256,7 +256,8 @@ export default function BoardRolesPage() {
 
   const saveRoleMutation = useMutation({
     mutationFn: async () => {
-      const areaId = roleAreaId && roleAreaId !== "__none__" ? roleAreaId : null;
+      const areaId = roleAreaId;
+      if (!areaId) throw new Error("L'area funzionale è obbligatoria");
       if (editingRole) {
         const { error } = await (supabase.from as any)("board_roles")
           .update({
@@ -286,7 +287,7 @@ export default function BoardRolesPage() {
         entityType: "board_role",
         entityId: editingRole?.id ?? crypto.randomUUID(),
         oldValues: editingRole ? { name: editingRole.name, description: editingRole.description, functional_area_id: editingRole.functional_area_id } : null,
-        newValues: { name: roleName, description: roleDescription || null, functional_area_id: roleAreaId && roleAreaId !== "__none__" ? roleAreaId : null },
+        newValues: { name: roleName, description: roleDescription || null, functional_area_id: roleAreaId },
       });
       setRoleDialogOpen(false);
       toast({ title: editingRole ? "Ruolo aggiornato" : "Ruolo creato" });
@@ -400,7 +401,7 @@ export default function BoardRolesPage() {
   const openEditRole = (role: BoardRole) => {
     setEditingRole(role);
     setRoleName(role.name);
-    setRoleAreaId(role.functional_area_id ?? "__none__");
+    setRoleAreaId(role.functional_area_id ?? "");
     setRoleDescription(role.description ?? "");
     setRoleDialogOpen(true);
   };
@@ -724,13 +725,12 @@ export default function BoardRolesPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="role-area">Area Funzionale</Label>
+              <Label htmlFor="role-area">Area Funzionale <span className="text-destructive">*</span></Label>
               <Select value={roleAreaId} onValueChange={setRoleAreaId}>
                 <SelectTrigger id="role-area">
-                  <SelectValue placeholder="Seleziona area..." />
+                  <SelectValue placeholder="Seleziona area (obbligatoria)..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">Nessuna area</SelectItem>
                   {areas.map((a) => (
                     <SelectItem key={a.id} value={a.id}>
                       {a.name}
@@ -760,7 +760,7 @@ export default function BoardRolesPage() {
             </Button>
             <Button
               onClick={() => saveRoleMutation.mutate()}
-              disabled={!roleName.trim() || saveRoleMutation.isPending}
+              disabled={!roleName.trim() || !roleAreaId || saveRoleMutation.isPending}
               className="flex items-center justify-center gap-2"
             >
               {saveRoleMutation.isPending ? "Salvataggio..." : "Salva"}

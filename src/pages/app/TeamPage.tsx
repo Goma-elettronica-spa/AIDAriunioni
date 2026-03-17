@@ -36,6 +36,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { writeAuditLog } from "@/lib/audit";
 import KpiManagementSheet from "@/components/team/KpiManagementSheet";
+import { Link } from "react-router-dom";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,11 +46,19 @@ type UserRow = {
   email: string;
   role: string;
   job_title: string | null;
+  board_role_id: string | null;
   is_active: boolean;
   invite_status: string | null;
   invited_by: string | null;
   invited_at: string | null;
   first_login_at: string | null;
+};
+
+type BoardRoleWithArea = {
+  id: string;
+  name: string;
+  functional_area_id: string;
+  area_name: string;
 };
 
 type FunctionalArea = {
@@ -325,45 +334,61 @@ function KpiDeltaBadge({
   );
 }
 
-// ── Inline editable job title ────────────────────────────────────────────────
+// ── Inline editable job title (board_role select) ────────────────────────────
 
 function InlineJobTitle({
   value,
+  boardRoleId,
   userId,
   tenantId,
   currentUserId,
   canEdit,
+  boardRoles,
 }: {
   value: string | null;
+  boardRoleId: string | null;
   userId: string;
   tenantId: string;
   currentUserId: string;
   canEdit: boolean;
+  boardRoles: BoardRoleWithArea[];
 }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value ?? "");
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: async (newTitle: string) => {
+    mutationFn: async (role: BoardRoleWithArea) => {
+      // Update user's job_title and board_role_id
       const { error } = await supabase
         .from("users")
-        .update({ job_title: newTitle || null })
+        .update({ job_title: role.name, board_role_id: role.id } as any)
         .eq("id", userId);
       if (error) throw error;
+
+      // Sync user_functional_areas: remove old, add new
+      await (supabase.from as any)("user_functional_areas")
+        .delete()
+        .eq("user_id", userId)
+        .eq("tenant_id", tenantId);
+
+      await (supabase.from as any)("user_functional_areas")
+        .insert({
+          user_id: userId,
+          functional_area_id: role.functional_area_id,
+          tenant_id: tenantId,
+        });
     },
-    onSuccess: (_data, newTitle) => {
+    onSuccess: (_data, role) => {
       queryClient.invalidateQueries({ queryKey: ["team-users"] });
+      queryClient.invalidateQueries({ queryKey: ["user-functional-areas"] });
       writeAuditLog({
         tenantId,
         userId: currentUserId,
         action: "update",
         entityType: "user",
         entityId: userId,
-        oldValues: { job_title: value },
-        newValues: { job_title: newTitle || null },
+        oldValues: { job_title: value, board_role_id: boardRoleId },
+        newValues: { job_title: role.name, board_role_id: role.id },
       });
-      setEditing(false);
       toast({ title: "Ruolo organizzativo aggiornato" });
     },
     onError: (err: Error) => {
@@ -371,43 +396,37 @@ function InlineJobTitle({
     },
   });
 
-  const handleSave = () => {
-    if (draft.trim() !== (value ?? "")) {
-      mutation.mutate(draft.trim());
-    } else {
-      setEditing(false);
-    }
-  };
+  if (!canEdit) {
+    return <span className="text-sm text-muted-foreground">{value || "\u2014"}</span>;
+  }
 
-  if (editing && canEdit) {
+  if (boardRoles.length === 0) {
     return (
-      <Input
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={handleSave}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") handleSave();
-          if (e.key === "Escape") setEditing(false);
-        }}
-        className="h-8 w-36 text-sm"
-        autoFocus
-        placeholder="es. CEO, CFO..."
-      />
+      <Link to="/board-roles" className="text-sm text-blue-600 hover:underline">
+        Crea ruoli
+      </Link>
     );
   }
 
   return (
-    <span
-      className={canEdit ? "cursor-pointer hover:underline text-sm" : "text-sm text-muted-foreground"}
-      onClick={() => {
-        if (canEdit) {
-          setDraft(value ?? "");
-          setEditing(true);
-        }
+    <Select
+      value={boardRoleId ?? ""}
+      onValueChange={(val) => {
+        const role = boardRoles.find((r) => r.id === val);
+        if (role) mutation.mutate(role);
       }}
     >
-      {value || "\u2014"}
-    </span>
+      <SelectTrigger className="h-8 w-48 text-xs">
+        <SelectValue placeholder="Seleziona ruolo..." />
+      </SelectTrigger>
+      <SelectContent>
+        {boardRoles.map((r) => (
+          <SelectItem key={r.id} value={r.id}>
+            {r.name} — {r.area_name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -560,6 +579,7 @@ export default function TeamPage() {
   const [invEmail, setInvEmail] = useState("");
   const [invName, setInvName] = useState("");
   const [invTitle, setInvTitle] = useState("");
+  const [invBoardRoleId, setInvBoardRoleId] = useState("");
   const [invRole, setInvRole] = useState("dirigente");
   const [invAreaIds, setInvAreaIds] = useState<string[]>([]);
 
@@ -568,6 +588,7 @@ export default function TeamPage() {
   const [editUser, setEditUser] = useState<UserRow | null>(null);
   const [editName, setEditName] = useState("");
   const [editTitle, setEditTitle] = useState("");
+  const [editBoardRoleId, setEditBoardRoleId] = useState("");
   const [editRole, setEditRole] = useState("");
 
   // KPI management sheet — now area-based
@@ -590,7 +611,7 @@ export default function TeamPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("users")
-        .select("id, full_name, email, role, job_title, is_active, invite_status, invited_by, invited_at, first_login_at" as any)
+        .select("id, full_name, email, role, job_title, board_role_id, is_active, invite_status, invited_by, invited_at, first_login_at" as any)
         .eq("tenant_id", tenantId!)
         .order("full_name", { ascending: true });
       if (error) throw error;
@@ -608,6 +629,25 @@ export default function TeamPage() {
         .order("name");
       if (error) throw error;
       return (data ?? []) as FunctionalArea[];
+    },
+  });
+
+  const boardRoles = useQuery({
+    queryKey: ["board-roles-with-areas", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data: roles } = await (supabase.from as any)("board_roles")
+        .select("id, name, functional_area_id")
+        .eq("tenant_id", tenantId!)
+        .order("name");
+      const { data: areas } = await (supabase.from as any)("functional_areas")
+        .select("id, name")
+        .eq("tenant_id", tenantId!);
+      const areaMap = new Map((areas ?? []).map((a: any) => [a.id, a.name]));
+      return (roles ?? []).map((r: any) => ({
+        ...r,
+        area_name: areaMap.get(r.functional_area_id) ?? "Senza area",
+      })) as BoardRoleWithArea[];
     },
   });
 
@@ -880,12 +920,16 @@ export default function TeamPage() {
       if (signUpError) throw signUpError;
       if (!signUpData.user) throw new Error("Impossibile creare l'utente di autenticazione");
 
-      // 2. Insert into users table with the REAL auth user id
+      // 2. Resolve board role details
+      const selectedRole = (boardRoles.data ?? []).find((r) => r.id === invBoardRoleId);
+
+      // 2b. Insert into users table with the REAL auth user id
       const { error } = await supabase.from("users").insert({
         id: signUpData.user.id,
         email,
         full_name: invName.trim(),
-        job_title: invTitle.trim() || null,
+        job_title: selectedRole ? selectedRole.name : (invTitle.trim() || null),
+        board_role_id: selectedRole ? selectedRole.id : null,
         role: invRole,
         tenant_id: tenantId!,
         invite_status: "invited",
@@ -894,9 +938,13 @@ export default function TeamPage() {
       } as any);
       if (error) throw error;
 
-      // 3. Add functional areas
-      if (invAreaIds.length > 0) {
-        const rows = invAreaIds.map((areaId) => ({
+      // 3. Add functional areas — merge explicit selections with role's area
+      const allAreaIds = new Set(invAreaIds);
+      if (selectedRole?.functional_area_id) {
+        allAreaIds.add(selectedRole.functional_area_id);
+      }
+      if (allAreaIds.size > 0) {
+        const rows = Array.from(allAreaIds).map((areaId) => ({
           user_id: signUpData.user!.id,
           functional_area_id: areaId,
           tenant_id: tenantId!,
@@ -923,6 +971,7 @@ export default function TeamPage() {
       setInvEmail("");
       setInvName("");
       setInvTitle("");
+      setInvBoardRoleId("");
       setInvRole("dirigente");
       setInvAreaIds([]);
       toast({
@@ -961,27 +1010,49 @@ export default function TeamPage() {
   const editMutation = useMutation({
     mutationFn: async () => {
       if (!editUser) return;
+      const selectedRole = (boardRoles.data ?? []).find((r) => r.id === editBoardRoleId);
+      const jobTitle = selectedRole ? selectedRole.name : (editTitle.trim() || null);
+      const boardRoleId = selectedRole ? selectedRole.id : null;
+
       const { error } = await supabase
         .from("users")
         .update({
           full_name: editName.trim(),
-          job_title: editTitle.trim() || null,
+          job_title: jobTitle,
+          board_role_id: boardRoleId,
           role: editRole,
-        })
+        } as any)
         .eq("id", editUser.id);
       if (error) throw error;
+
+      // Sync user_functional_areas if a board role with area was selected
+      if (selectedRole?.functional_area_id) {
+        await (supabase.from as any)("user_functional_areas")
+          .delete()
+          .eq("user_id", editUser.id)
+          .eq("tenant_id", tenantId!);
+
+        await (supabase.from as any)("user_functional_areas")
+          .insert({
+            user_id: editUser.id,
+            functional_area_id: selectedRole.functional_area_id,
+            tenant_id: tenantId!,
+          });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-users"] });
+      queryClient.invalidateQueries({ queryKey: ["user-functional-areas"] });
       if (editUser) {
+        const selectedRole = (boardRoles.data ?? []).find((r) => r.id === editBoardRoleId);
         writeAuditLog({
           tenantId: tenantId!,
           userId: user!.id,
           action: "update",
           entityType: "user",
           entityId: editUser.id,
-          oldValues: { full_name: editUser.full_name, role: editUser.role, job_title: editUser.job_title },
-          newValues: { full_name: editName.trim(), role: editRole, job_title: editTitle.trim() || null },
+          oldValues: { full_name: editUser.full_name, role: editUser.role, job_title: editUser.job_title, board_role_id: editUser.board_role_id },
+          newValues: { full_name: editName.trim(), role: editRole, job_title: selectedRole ? selectedRole.name : (editTitle.trim() || null), board_role_id: selectedRole?.id ?? null },
         });
       }
       setEditOpen(false);
@@ -1171,6 +1242,7 @@ export default function TeamPage() {
     setEditUser(u);
     setEditName(u.full_name);
     setEditTitle(u.job_title ?? "");
+    setEditBoardRoleId(u.board_role_id ?? "");
     setEditRole(u.role);
     setEditOpen(true);
   };
@@ -1848,12 +1920,38 @@ export default function TeamPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="inv-title">Ruolo Organizzativo (Job Title)</Label>
-              <Input
-                id="inv-title"
-                value={invTitle}
-                onChange={(e) => setInvTitle(e.target.value)}
-                placeholder="es. CEO, CFO, Direttore Commerciale"
-              />
+              {(boardRoles.data ?? []).length > 0 ? (
+                <Select
+                  value={invBoardRoleId}
+                  onValueChange={(val) => {
+                    setInvBoardRoleId(val);
+                    const role = (boardRoles.data ?? []).find((r) => r.id === val);
+                    if (role) {
+                      setInvTitle(role.name);
+                      if (role.functional_area_id && !invAreaIds.includes(role.functional_area_id)) {
+                        setInvAreaIds((prev) => [...prev, role.functional_area_id]);
+                      }
+                    }
+                  }}
+                >
+                  <SelectTrigger id="inv-title">
+                    <SelectValue placeholder="Seleziona ruolo..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(boardRoles.data ?? []).map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.name} — {r.area_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  <Link to="/board-roles" className="text-blue-600 hover:underline">
+                    Crea prima i ruoli nell'Organigramma
+                  </Link>
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Permessi</Label>
@@ -1940,12 +2038,35 @@ export default function TeamPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-title">Ruolo Organizzativo (Job Title)</Label>
-              <Input
-                id="edit-title"
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                placeholder="es. CEO, CFO, Direttore Commerciale"
-              />
+              {(boardRoles.data ?? []).length > 0 ? (
+                <Select
+                  value={editBoardRoleId}
+                  onValueChange={(val) => {
+                    setEditBoardRoleId(val);
+                    const role = (boardRoles.data ?? []).find((r) => r.id === val);
+                    if (role) {
+                      setEditTitle(role.name);
+                    }
+                  }}
+                >
+                  <SelectTrigger id="edit-title">
+                    <SelectValue placeholder="Seleziona ruolo..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(boardRoles.data ?? []).map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.name} — {r.area_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  <Link to="/board-roles" className="text-blue-600 hover:underline">
+                    Crea prima i ruoli nell'Organigramma
+                  </Link>
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Permessi</Label>
