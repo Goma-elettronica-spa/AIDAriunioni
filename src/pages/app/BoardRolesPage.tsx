@@ -53,8 +53,14 @@ type TenantUser = {
   id: string;
   full_name: string;
   job_title: string | null;
-  board_role_id: string | null;
   is_active: boolean;
+};
+
+type UserBoardRole = {
+  id: string;
+  user_id: string;
+  board_role_id: string;
+  tenant_id: string;
 };
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
@@ -118,7 +124,7 @@ export default function BoardRolesPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("users")
-        .select("id, full_name, job_title, board_role_id, is_active")
+        .select("id, full_name, job_title, is_active")
         .eq("tenant_id", tenantId!)
         .eq("is_active", true)
         .order("full_name");
@@ -127,9 +133,22 @@ export default function BoardRolesPage() {
     },
   });
 
+  const userBoardRolesQuery = useQuery({
+    queryKey: ["user-board-roles", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("user_board_roles")
+        .select("*")
+        .eq("tenant_id", tenantId!);
+      if (error) throw error;
+      return (data ?? []) as UserBoardRole[];
+    },
+  });
+
   const areas = areasQuery.data ?? [];
   const roles = rolesQuery.data ?? [];
   const users = usersQuery.data ?? [];
+  const userBoardRoles = userBoardRolesQuery.data ?? [];
 
   // ── Derived data ──────────────────────────────────────────────────────────
 
@@ -139,13 +158,23 @@ export default function BoardRolesPage() {
     return map;
   }, [areas]);
 
-  const userByRoleId = useMemo(() => {
+  const userMap = useMemo(() => {
     const map = new Map<string, TenantUser>();
-    for (const u of users) {
-      if (u.board_role_id) map.set(u.board_role_id, u);
-    }
+    for (const u of users) map.set(u.id, u);
     return map;
   }, [users]);
+
+  // roleId → list of assigned users
+  const usersByRoleId = useMemo(() => {
+    const map = new Map<string, TenantUser[]>();
+    for (const ubr of userBoardRoles) {
+      const u = userMap.get(ubr.user_id);
+      if (!u) continue;
+      if (!map.has(ubr.board_role_id)) map.set(ubr.board_role_id, []);
+      map.get(ubr.board_role_id)!.push(u);
+    }
+    return map;
+  }, [userBoardRoles, userMap]);
 
   const rolesByArea = useMemo(() => {
     const map = new Map<string | null, BoardRole[]>();
@@ -157,9 +186,16 @@ export default function BoardRolesPage() {
     return map;
   }, [roles]);
 
+  // Users with no role assignments at all
+  const assignedUserIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const ubr of userBoardRoles) set.add(ubr.user_id);
+    return set;
+  }, [userBoardRoles]);
+
   const unassignedUsers = useMemo(
-    () => users.filter((u) => !u.board_role_id),
-    [users],
+    () => users.filter((u) => !assignedUserIds.has(u.id)),
+    [users, assignedUserIds],
   );
 
   // Build ordered rows: grouped by area, then "Senza Area" at end
@@ -168,7 +204,6 @@ export default function BoardRolesPage() {
     for (const area of areas) {
       const areaRoles = rolesByArea.get(area.id) ?? [];
       if (areaRoles.length === 0) {
-        // Show area row even without roles
         rows.push({ role: null, areaName: area.name, areaId: area.id, showArea: true });
       } else {
         areaRoles.forEach((role, idx) => {
@@ -220,21 +255,16 @@ export default function BoardRolesPage() {
   const deleteAreaMutation = useMutation({
     mutationFn: async (id: string) => {
       try {
-        // Nullify functional_area_id on KPIs that reference this area
         await supabase
           .from("kpi_definitions")
           .update({ functional_area_id: null })
           .eq("functional_area_id", id);
-
-        // Remove user_functional_areas entries for this area
         await (supabase.from as any)("user_functional_areas")
           .delete()
           .eq("functional_area_id", id);
       } catch (_) {
-        // These may not exist or may fail — continue with area deletion
         console.warn("Cleanup before area delete had non-critical errors");
       }
-
       const { error } = await (supabase.from as any)("functional_areas")
         .delete()
         .eq("id", id);
@@ -304,6 +334,7 @@ export default function BoardRolesPage() {
 
   const deleteRoleMutation = useMutation({
     mutationFn: async (id: string) => {
+      // Junction rows cascade-deleted via FK
       const { error } = await (supabase.from as any)("board_roles")
         .delete()
         .eq("id", id);
@@ -311,6 +342,7 @@ export default function BoardRolesPage() {
     },
     onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ["board-roles-roles"] });
+      queryClient.invalidateQueries({ queryKey: ["user-board-roles"] });
       writeAuditLog({
         tenantId: tenantId!,
         userId: user!.id,
@@ -329,21 +361,18 @@ export default function BoardRolesPage() {
 
   const assignRoleMutation = useMutation({
     mutationFn: async ({ userId, roleId }: { userId: string; roleId: string }) => {
-      const { error } = await (supabase.from as any)("users")
-        .update({ board_role_id: roleId })
-        .eq("id", userId);
+      const { error } = await (supabase.from as any)("user_board_roles")
+        .insert({ user_id: userId, board_role_id: roleId, tenant_id: tenantId });
       if (error) throw error;
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["board-roles-users"] });
-      const targetUser = users.find((u) => u.id === variables.userId);
+      queryClient.invalidateQueries({ queryKey: ["user-board-roles"] });
       writeAuditLog({
         tenantId: tenantId!,
         userId: user!.id,
-        action: "update",
-        entityType: "user",
+        action: "create",
+        entityType: "user_board_role",
         entityId: variables.userId,
-        oldValues: { board_role_id: targetUser?.board_role_id ?? null },
         newValues: { board_role_id: variables.roleId },
       });
       toast({ title: "Ruolo assegnato" });
@@ -354,23 +383,22 @@ export default function BoardRolesPage() {
   });
 
   const unassignRoleMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      const { error } = await (supabase.from as any)("users")
-        .update({ board_role_id: null })
-        .eq("id", userId);
+    mutationFn: async ({ userId, roleId }: { userId: string; roleId: string }) => {
+      const { error } = await (supabase.from as any)("user_board_roles")
+        .delete()
+        .eq("user_id", userId)
+        .eq("board_role_id", roleId);
       if (error) throw error;
     },
-    onSuccess: (_data, userId) => {
-      queryClient.invalidateQueries({ queryKey: ["board-roles-users"] });
-      const targetUser = users.find((u) => u.id === userId);
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["user-board-roles"] });
       writeAuditLog({
         tenantId: tenantId!,
         userId: user!.id,
-        action: "update",
-        entityType: "user",
-        entityId: userId,
-        oldValues: { board_role_id: targetUser?.board_role_id ?? null },
-        newValues: { board_role_id: null },
+        action: "delete",
+        entityType: "user_board_role",
+        entityId: variables.userId,
+        oldValues: { board_role_id: variables.roleId },
       });
       toast({ title: "Assegnazione rimossa" });
     },
@@ -412,7 +440,7 @@ export default function BoardRolesPage() {
   };
 
   const [areaDeps, setAreaDeps] = useState<{ kpis: number; roles: number }>({ kpis: 0, roles: 0 });
-  const [roleDeps, setRoleDeps] = useState<{ hasUser: boolean; userName: string }>({ hasUser: false, userName: "" });
+  const [roleDeps, setRoleDeps] = useState<{ hasUsers: boolean; userNames: string[] }>({ hasUsers: false, userNames: [] });
 
   const handleDeleteArea = async (area: FunctionalArea) => {
     try {
@@ -437,8 +465,8 @@ export default function BoardRolesPage() {
   };
 
   const handleDeleteRole = (role: BoardRole) => {
-    const assigned = userByRoleId.get(role.id);
-    setRoleDeps({ hasUser: !!assigned, userName: assigned?.full_name ?? "" });
+    const assignedUsers = usersByRoleId.get(role.id) ?? [];
+    setRoleDeps({ hasUsers: assignedUsers.length > 0, userNames: assignedUsers.map(u => u.full_name) });
     setRoleToDelete(role);
     setDeleteConfirmOpen(true);
   };
@@ -447,13 +475,13 @@ export default function BoardRolesPage() {
     assignRoleMutation.mutate({ userId, roleId });
   };
 
-  const handleUnassign = (userId: string) => {
-    unassignRoleMutation.mutate(userId);
+  const handleUnassign = (userId: string, roleId: string) => {
+    unassignRoleMutation.mutate({ userId, roleId });
   };
 
   // ── Loading state ─────────────────────────────────────────────────────────
 
-  const isLoading = areasQuery.isLoading || rolesQuery.isLoading || usersQuery.isLoading;
+  const isLoading = areasQuery.isLoading || rolesQuery.isLoading || usersQuery.isLoading || userBoardRolesQuery.isLoading;
 
   if (isLoading) {
     return (
@@ -512,14 +540,16 @@ export default function BoardRolesPage() {
               <tr className="border-b border-border bg-muted/50">
                 <th className="text-left font-medium text-muted-foreground py-2 px-4 w-[18%]">Area Funzionale</th>
                 <th className="text-left font-medium text-muted-foreground py-2 px-4 w-[18%]">Ruolo</th>
-                <th className="text-left font-medium text-muted-foreground py-2 px-4 w-[22%]">Persona Assegnata</th>
-                <th className="text-right font-medium text-muted-foreground py-2 px-4 w-[24%]">Azioni</th>
+                <th className="text-left font-medium text-muted-foreground py-2 px-4 w-[28%]">Persone Assegnate</th>
+                <th className="text-right font-medium text-muted-foreground py-2 px-4 w-[18%]">Azioni</th>
               </tr>
             </thead>
             <tbody>
               {tableRows.map((row, rowIndex) => {
-                const assignedUser = row.role ? (userByRoleId.get(row.role.id) ?? null) : null;
+                const assignedUsers = row.role ? (usersByRoleId.get(row.role.id) ?? []) : [];
                 const area = row.areaId ? areaMap.get(row.areaId) : null;
+                // Users not already assigned to THIS role
+                const availableUsers = users.filter(u => !assignedUsers.some(au => au.id === u.id));
 
                 return (
                   <tr key={row.role?.id ?? `area-${row.areaId}-${rowIndex}`} className="border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors">
@@ -571,23 +601,36 @@ export default function BoardRolesPage() {
                       )}
                     </td>
 
-                    {/* Persona Assegnata */}
+                    {/* Persone Assegnate (multiple) */}
                     <td className="py-2 px-4 align-middle">
-                      {assignedUser ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-foreground">{assignedUser.full_name}</span>
+                      {assignedUsers.length > 0 ? (
+                        <div className="flex items-center flex-wrap gap-1.5">
+                          {assignedUsers.map((au) => (
+                            <Badge key={au.id} variant="secondary" className="inline-flex items-center gap-1 text-xs">
+                              {au.full_name}
+                              {row.role && (
+                                <button
+                                  type="button"
+                                  className="rounded-full hover:bg-destructive/20 p-0.5"
+                                  onClick={() => handleUnassign(au.id, row.role!.id)}
+                                  title="Rimuovi assegnazione"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              )}
+                            </Badge>
+                          ))}
                         </div>
                       ) : (
                         <span className="text-muted-foreground">&mdash;</span>
                       )}
                     </td>
 
-
                     {/* Azioni */}
                     <td className="py-2 px-4 align-middle">
                       {row.role ? (
                         <div className="flex items-center justify-end gap-2">
-                          {/* Assign / reassign dropdown */}
+                          {/* Assign dropdown */}
                           <Select
                             value=""
                             onValueChange={(val) => {
@@ -597,17 +640,15 @@ export default function BoardRolesPage() {
                             }}
                           >
                             <SelectTrigger className="w-40 h-7 text-xs">
-                              <SelectValue placeholder={assignedUser ? "Riassegna..." : "Assegna..."} />
+                              <SelectValue placeholder="Aggiungi persona..." />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="__cancel__">Annulla</SelectItem>
-                              {users
-                                .filter((u) => u.id !== assignedUser?.id)
-                                .map((u) => (
-                                  <SelectItem key={u.id} value={u.id}>
-                                    {u.full_name}
-                                  </SelectItem>
-                                ))}
+                              {availableUsers.map((u) => (
+                                <SelectItem key={u.id} value={u.id}>
+                                  {u.full_name}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
 
@@ -621,19 +662,6 @@ export default function BoardRolesPage() {
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
-
-                          {/* Unassign */}
-                          {assignedUser && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-destructive hover:text-destructive"
-                              onClick={() => handleUnassign(assignedUser.id)}
-                              title="Rimuovi assegnazione"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
 
                           {/* Delete role */}
                           <Button
@@ -676,13 +704,11 @@ export default function BoardRolesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">Nessun ruolo</SelectItem>
-                    {roles
-                      .filter((r) => !userByRoleId.has(r.id))
-                      .map((r) => (
-                        <SelectItem key={r.id} value={r.id}>
-                          {r.name}
-                        </SelectItem>
-                      ))}
+                    {roles.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </Badge>
@@ -807,18 +833,18 @@ export default function BoardRolesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {roleDeps.hasUser && <AlertTriangle className="h-5 w-5 text-destructive" />}
+              {roleDeps.hasUsers && <AlertTriangle className="h-5 w-5 text-destructive" />}
               Eliminare il ruolo "{roleToDelete?.name}"?
             </DialogTitle>
           </DialogHeader>
-          {roleDeps.hasUser ? (
+          {roleDeps.hasUsers ? (
             <div className="py-4 space-y-2">
               <p className="text-sm text-destructive font-medium">
                 Non è possibile eliminare questo ruolo.
               </p>
               <p className="text-sm text-muted-foreground">
-                Il ruolo è attualmente assegnato a <span className="font-semibold text-foreground">{roleDeps.userName}</span>.
-                Prima di eliminarlo, rimuovi l'assegnazione o riassegna la persona a un altro ruolo.
+                Il ruolo è attualmente assegnato a: <span className="font-semibold text-foreground">{roleDeps.userNames.join(", ")}</span>.
+                Prima di eliminarlo, rimuovi le assegnazioni.
               </p>
             </div>
           ) : (
@@ -832,9 +858,9 @@ export default function BoardRolesPage() {
               onClick={() => setDeleteConfirmOpen(false)}
               className="flex items-center justify-center gap-2"
             >
-              {roleDeps.hasUser ? "Chiudi" : "Annulla"}
+              {roleDeps.hasUsers ? "Chiudi" : "Annulla"}
             </Button>
-            {!roleDeps.hasUser && (
+            {!roleDeps.hasUsers && (
               <Button
                 variant="destructive"
                 onClick={() => roleToDelete && deleteRoleMutation.mutate(roleToDelete.id)}
@@ -880,7 +906,7 @@ export default function BoardRolesPage() {
                 onClick={() => areaToDelete && deleteAreaMutation.mutate(areaToDelete.id)}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                {deleteAreaMutation.isPending ? "Eliminazione..." : "Elimina"}
+                Elimina
               </AlertDialogAction>
             )}
           </AlertDialogFooter>

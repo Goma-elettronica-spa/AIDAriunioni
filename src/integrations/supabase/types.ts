@@ -1226,6 +1226,52 @@ export type Database = {
           },
         ]
       }
+      user_board_roles: {
+        Row: {
+          board_role_id: string
+          created_at: string
+          id: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          board_role_id: string
+          created_at?: string
+          id?: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          board_role_id?: string
+          created_at?: string
+          id?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_board_roles_board_role_id_fkey"
+            columns: ["board_role_id"]
+            isOneToOne: false
+            referencedRelation: "board_roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_board_roles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_board_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_functional_areas: {
         Row: {
           created_at: string
