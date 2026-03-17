@@ -172,6 +172,7 @@ export default function KpiManagementSheet({
       queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId ?? "__company__", tenantId] });
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-company", tenantId] });
       const oldKpi = activeKpis.find((k) => k.id === variables.id);
       writeAuditLog({
         tenantId,
