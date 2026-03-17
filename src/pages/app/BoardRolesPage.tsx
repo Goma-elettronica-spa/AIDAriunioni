@@ -573,14 +573,6 @@ export default function BoardRolesPage() {
                       )}
                     </td>
 
-                    {/* Job Title */}
-                    <td className="py-2 px-4 align-middle">
-                      {assignedUser?.job_title ? (
-                        <span className="text-muted-foreground">{assignedUser.job_title}</span>
-                      ) : (
-                        <span className="text-muted-foreground">&mdash;</span>
-                      )}
-                    </td>
 
                     {/* Azioni */}
                     <td className="py-2 px-4 align-middle">
