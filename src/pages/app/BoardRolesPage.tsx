@@ -509,7 +509,6 @@ export default function BoardRolesPage() {
                 <th className="text-left font-medium text-muted-foreground py-2 px-4 w-[18%]">Ruolo</th>
                 <th className="text-left font-medium text-muted-foreground py-2 px-4 w-[22%]">Persona Assegnata</th>
                 <th className="text-right font-medium text-muted-foreground py-2 px-4 w-[24%]">Azioni</th>
-                <th className="text-right font-medium text-muted-foreground py-2 px-4 w-[24%]">Azioni</th>
               </tr>
             </thead>
             <tbody>
