@@ -430,7 +430,7 @@ function InlineJobTitle({
   );
 }
 
-// ── Area badges for a user (with add/remove) ────────────────────────────────
+// ── Area badge for a user (single area per user) ─────────────────────────────
 
 function UserAreaBadges({
   userId,
@@ -449,38 +449,20 @@ function UserAreaBadges({
   canEdit: boolean;
   onChanged: () => void;
 }) {
-  const [popoverOpen, setPopoverOpen] = useState(false);
+  const currentAreaId = userAreaIds[0] ?? "";
 
-  const addMutation = useMutation({
+  const assignMutation = useMutation({
     mutationFn: async (areaId: string) => {
-      const { error } = await (supabase.from as any)("user_functional_areas")
-        .insert({ user_id: userId, functional_area_id: areaId, tenant_id: tenantId });
-      if (error) throw error;
-    },
-    onSuccess: (_data, areaId) => {
-      onChanged();
-      const area = allAreas.find((a) => a.id === areaId);
-      writeAuditLog({
-        tenantId,
-        userId: currentUserId,
-        action: "create",
-        entityType: "user_functional_area",
-        entityId: userId,
-        newValues: { functional_area_id: areaId, area_name: area?.name },
-      });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Errore", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const removeMutation = useMutation({
-    mutationFn: async (areaId: string) => {
-      const { error } = await (supabase.from as any)("user_functional_areas")
+      // Remove existing assignment first
+      await (supabase.from as any)("user_functional_areas")
         .delete()
-        .eq("user_id", userId)
-        .eq("functional_area_id", areaId);
-      if (error) throw error;
+        .eq("user_id", userId);
+
+      if (areaId) {
+        const { error } = await (supabase.from as any)("user_functional_areas")
+          .insert({ user_id: userId, functional_area_id: areaId, tenant_id: tenantId });
+        if (error) throw error;
+      }
     },
     onSuccess: (_data, areaId) => {
       onChanged();
@@ -488,10 +470,11 @@ function UserAreaBadges({
       writeAuditLog({
         tenantId,
         userId: currentUserId,
-        action: "delete",
+        action: "update",
         entityType: "user_functional_area",
         entityId: userId,
-        oldValues: { functional_area_id: areaId, area_name: area?.name },
+        oldValues: { functional_area_id: currentAreaId || null },
+        newValues: { functional_area_id: areaId || null, area_name: area?.name ?? null },
       });
     },
     onError: (err: Error) => {
@@ -499,62 +482,35 @@ function UserAreaBadges({
     },
   });
 
-  const assignedAreas = allAreas.filter((a) => userAreaIds.includes(a.id));
-  const unassignedAreas = allAreas.filter((a) => !userAreaIds.includes(a.id));
+  if (!canEdit) {
+    const area = allAreas.find((a) => a.id === currentAreaId);
+    return area ? (
+      <Badge variant="outline" className="inline-flex items-center text-xs">{area.name}</Badge>
+    ) : (
+      <span className="text-muted-foreground text-xs">—</span>
+    );
+  }
 
   return (
-    <div className="flex items-center flex-wrap gap-1">
-      {assignedAreas.map((area) => (
-        <Badge key={area.id} variant="outline" className="inline-flex items-center text-xs gap-1">
-          {area.name}
-          {canEdit && (
-            <button
-              type="button"
-              className="ml-0.5 rounded-full hover:bg-muted p-0.5"
-              onClick={(e) => {
-                e.stopPropagation();
-                removeMutation.mutate(area.id);
-              }}
-            >
-              <X className="h-2.5 w-2.5" />
-            </button>
-          )}
-        </Badge>
-      ))}
-      {canEdit && (
-        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="inline-flex items-center justify-center h-5 w-5 rounded-full border border-dashed border-border text-muted-foreground hover:bg-muted"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Plus className="h-3 w-3" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-48 p-2" align="start" onClick={(e) => e.stopPropagation()}>
-            {unassignedAreas.length === 0 ? (
-              <p className="text-xs text-muted-foreground p-2">Tutte le aree assegnate</p>
-            ) : (
-              <div className="space-y-1">
-                {unassignedAreas.map((area) => (
-                  <button
-                    key={area.id}
-                    type="button"
-                    className="flex items-center w-full text-left text-sm px-2 py-1.5 rounded hover:bg-muted"
-                    onClick={() => {
-                      addMutation.mutate(area.id);
-                    }}
-                  >
-                    {area.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </PopoverContent>
-        </Popover>
-      )}
-    </div>
+    <Select
+      value={currentAreaId || "__none__"}
+      onValueChange={(val) => {
+        const newAreaId = val === "__none__" ? "" : val;
+        if (newAreaId !== currentAreaId) {
+          assignMutation.mutate(newAreaId);
+        }
+      }}
+    >
+      <SelectTrigger className="h-7 w-36 text-xs">
+        <SelectValue placeholder="Assegna area..." />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="__none__">Nessuna area</SelectItem>
+        {allAreas.map((a) => (
+          <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -581,7 +537,7 @@ export default function TeamPage() {
   const [invTitle, setInvTitle] = useState("");
   const [invBoardRoleId, setInvBoardRoleId] = useState("");
   const [invRole, setInvRole] = useState("dirigente");
-  const [invAreaIds, setInvAreaIds] = useState<string[]>([]);
+  const [invAreaId, setInvAreaId] = useState("");
 
   // Edit dialog
   const [editOpen, setEditOpen] = useState(false);
@@ -941,19 +897,11 @@ export default function TeamPage() {
       } as any);
       if (error) throw error;
 
-      // 3. Add functional areas — merge explicit selections with role's area
-      const allAreaIds = new Set(invAreaIds);
-      if (selectedRole?.functional_area_id) {
-        allAreaIds.add(selectedRole.functional_area_id);
-      }
-      if (allAreaIds.size > 0) {
-        const rows = Array.from(allAreaIds).map((areaId) => ({
-          user_id: placeholderId,
-          functional_area_id: areaId,
-          tenant_id: tenantId!,
-        }));
+      // 3. Add functional area (single)
+      const areaToAssign = invAreaId || selectedRole?.functional_area_id;
+      if (areaToAssign) {
         const { error: areaError } = await (supabase.from as any)("user_functional_areas")
-          .insert(rows);
+          .insert({ user_id: placeholderId, functional_area_id: areaToAssign, tenant_id: tenantId! });
         if (areaError) throw areaError;
       }
 
@@ -976,7 +924,7 @@ export default function TeamPage() {
       setInvTitle("");
       setInvBoardRoleId("");
       setInvRole("dirigente");
-      setInvAreaIds([]);
+      setInvAreaId("");
       toast({
         title: "Utente aggiunto",
         description: `${invName.trim()} è stato pre-registrato. Quando si registrerà e farà login, sarà riconosciuto automaticamente.`,
@@ -1240,11 +1188,7 @@ export default function TeamPage() {
     return false;
   };
 
-  const handleInvAreaToggle = (areaId: string, checked: boolean) => {
-    setInvAreaIds((prev) =>
-      checked ? [...prev, areaId] : prev.filter((id) => id !== areaId)
-    );
-  };
+  // Removed: handleInvAreaToggle (single area now)
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -1509,7 +1453,7 @@ export default function TeamPage() {
                 <TableHead className="hidden md:table-cell">Email</TableHead>
                 <TableHead>Ruolo Org</TableHead>
                 <TableHead>Permessi</TableHead>
-                <TableHead className="hidden lg:table-cell">Aree Funzionali</TableHead>
+                <TableHead className="hidden lg:table-cell">Area Funzionale</TableHead>
                 <TableHead>KPI</TableHead>
                 <TableHead>Stato</TableHead>
                 <TableHead className="w-28">Azioni</TableHead>
@@ -1906,8 +1850,8 @@ export default function TeamPage() {
                     const role = (boardRoles.data ?? []).find((r) => r.id === val);
                     if (role) {
                       setInvTitle(role.name);
-                      if (role.functional_area_id && !invAreaIds.includes(role.functional_area_id)) {
-                        setInvAreaIds((prev) => [...prev, role.functional_area_id]);
+                      if (role.functional_area_id) {
+                        setInvAreaId(role.functional_area_id);
                       }
                     }
                   }}
@@ -1946,24 +1890,18 @@ export default function TeamPage() {
             </div>
             {areas.length > 0 && (
               <div className="space-y-2">
-                <Label>Aree Funzionali</Label>
-                <div className="grid gap-2 max-h-32 overflow-y-auto border border-border rounded-md p-3">
-                  {areas.map((area) => (
-                    <div key={area.id} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`inv-area-${area.id}`}
-                        checked={invAreaIds.includes(area.id)}
-                        onCheckedChange={(checked) => handleInvAreaToggle(area.id, checked === true)}
-                      />
-                      <Label
-                        htmlFor={`inv-area-${area.id}`}
-                        className="text-sm font-normal cursor-pointer"
-                      >
-                        {area.name}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
+                <Label>Area Funzionale</Label>
+                <Select value={invAreaId || "__none__"} onValueChange={(v) => setInvAreaId(v === "__none__" ? "" : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona area..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Nessuna area</SelectItem>
+                    {areas.map((area) => (
+                      <SelectItem key={area.id} value={area.id}>{area.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
             <p className="text-xs text-muted-foreground">
