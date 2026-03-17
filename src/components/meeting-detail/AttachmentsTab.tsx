@@ -157,7 +157,7 @@ export function AttachmentsTab({ meeting }: Props) {
       }
 
       setUploading(true);
-      const path = `${tenantId}/${meetingId}/${selectedUserId}.pdf`;
+      const path = `${tenantId}/${meetingId}/${selectedAreaId}_${selectedUserId}.pdf`;
 
       const { error: uploadError } = await supabase.storage
         .from("slides")
@@ -171,12 +171,13 @@ export function AttachmentsTab({ meeting }: Props) {
 
       const { data: urlData } = supabase.storage.from("slides").getPublicUrl(path);
 
-      // Check if exists
+      // Check if exists for this user+area+meeting
       const { data: existingSlide } = await supabase
         .from("slide_uploads")
         .select("id")
         .eq("meeting_id", meetingId)
         .eq("user_id", selectedUserId)
+        .eq("functional_area_id", selectedAreaId)
         .eq("tenant_id", tenantId)
         .maybeSingle();
 
@@ -194,6 +195,7 @@ export function AttachmentsTab({ meeting }: Props) {
           meeting_id: meetingId,
           user_id: selectedUserId,
           tenant_id: tenantId,
+          functional_area_id: selectedAreaId,
           file_name: file.name,
           file_size: file.size,
           file_url: urlData.publicUrl,
