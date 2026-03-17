@@ -19,6 +19,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 
 import { OverviewTab } from "@/components/meeting-detail/OverviewTab";
+import { AttachmentsTab } from "@/components/meeting-detail/AttachmentsTab";
 import { MaterialeTab } from "@/components/meeting-detail/MaterialeTab";
 import { PostMeetingTab } from "@/components/meeting-detail/PostMeetingTab";
 import { TasksTab } from "@/components/meeting-detail/TasksTab";
