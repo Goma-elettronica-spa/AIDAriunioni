@@ -350,11 +350,10 @@ export default function MeetingsPage() {
                             locale: it,
                           })}
                         </span>
-                        {(m.status === "draft" || m.status === "pre_meeting") &&
-                          m.pre_meeting_deadline &&
+                        {m.pre_meeting_deadline &&
                           !isPast && (
                             <span>
-                              Deadline:{" "}
+                              Apertura upload:{" "}
                               {format(
                                 new Date(m.pre_meeting_deadline),
                                 "d MMM",
