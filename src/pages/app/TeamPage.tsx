@@ -1465,7 +1465,7 @@ export default function TeamPage() {
                 <TableHead className="hidden md:table-cell">Email</TableHead>
                 <TableHead>Ruolo Org</TableHead>
                 <TableHead>Permessi</TableHead>
-                <TableHead className="hidden lg:table-cell">Aree Funzionali</TableHead>
+                <TableHead className="hidden lg:table-cell">Area Funzionale</TableHead>
                 <TableHead>KPI</TableHead>
                 <TableHead>Stato</TableHead>
                 <TableHead className="w-28">Azioni</TableHead>
