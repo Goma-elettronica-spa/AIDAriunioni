@@ -36,7 +36,7 @@ import {
 interface KpiManagementSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  areaId: string;
+  areaId: string | null;
   areaName: string;
   tenantId: string;
 }
