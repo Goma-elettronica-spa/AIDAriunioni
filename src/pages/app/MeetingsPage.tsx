@@ -150,14 +150,13 @@ export default function MeetingsPage() {
 
   // Create
   const openCreate = () => {
-    const now = new Date();
-    const monthName = format(now, "MMMM yyyy", { locale: it });
+    const d = new Date();
+    const monthName = format(d, "MMMM yyyy", { locale: it });
     setTitle(`Riunione Prima Linea - ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}`);
     setScheduledDate(undefined);
     setDeadline(undefined);
-    const now = new Date();
-    const q = Math.ceil((now.getMonth() + 1) / 3);
-    setSelectedQuarter(`Q${q}-${now.getFullYear()}`);
+    const q = Math.ceil((d.getMonth() + 1) / 3);
+    setSelectedQuarter(`Q${q}-${d.getFullYear()}`);
     setCreateOpen(true);
   };
 
