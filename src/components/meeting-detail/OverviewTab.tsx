@@ -1,3 +1,4 @@
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Check, X, FileText, Loader2, Send, RefreshCw, Eye, Download } from "lucide-react";
+import { Check, X, FileText, Loader2, Send, RefreshCw, Eye, Download, Upload } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
 import type { Json } from "@/integrations/supabase/types";
@@ -25,6 +26,66 @@ export function OverviewTab({ meeting, isAdmin }: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [uploadingForUser, setUploadingForUser] = useState<string | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const pendingUploadUserId = useRef<string | null>(null);
+
+  const handleAdminUpload = useCallback(
+    async (file: File, targetUserId: string) => {
+      if (file.type !== "application/pdf") {
+        toast({ title: "Solo file PDF", variant: "destructive" });
+        return;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        toast({ title: "File troppo grande (max 50MB)", variant: "destructive" });
+        return;
+      }
+      setUploadingForUser(targetUserId);
+      const path = `${tenantId}/${meetingId}/${targetUserId}.pdf`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("slides")
+        .upload(path, file, { upsert: true });
+
+      if (uploadError) {
+        toast({ title: "Errore upload", description: uploadError.message, variant: "destructive" });
+        setUploadingForUser(null);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage.from("slides").getPublicUrl(path);
+
+      const { data: existingSlide } = await supabase
+        .from("slide_uploads")
+        .select("id")
+        .eq("meeting_id", meetingId)
+        .eq("user_id", targetUserId)
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+
+      if (existingSlide?.id) {
+        await supabase
+          .from("slide_uploads")
+          .update({ file_name: file.name, file_size: file.size, file_url: urlData.publicUrl })
+          .eq("id", existingSlide.id);
+      } else {
+        await supabase.from("slide_uploads").insert({
+          meeting_id: meetingId,
+          user_id: targetUserId,
+          tenant_id: tenantId,
+          file_name: file.name,
+          file_size: file.size,
+          file_url: urlData.publicUrl,
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["overview-slides"] });
+      queryClient.invalidateQueries({ queryKey: ["attachments-slides"] });
+      setUploadingForUser(null);
+      toast({ title: "Allegato caricato" });
+    },
+    [meetingId, tenantId, queryClient]
+  );
 
   // Fetch dirigenti
   const dirigenti = useQuery({
@@ -529,7 +590,28 @@ export function OverviewTab({ meeting, isAdmin }: Props) {
                             ))}
                           </div>
                         ) : (
-                          <span className="text-muted-foreground text-sm">(nessun allegato)</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground text-sm">(nessun allegato)</span>
+                            {isAdmin && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-xs px-2"
+                                disabled={uploadingForUser === u.userId}
+                                onClick={() => {
+                                  pendingUploadUserId.current = u.userId;
+                                  uploadInputRef.current?.click();
+                                }}
+                              >
+                                {uploadingForUser === u.userId ? (
+                                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                ) : (
+                                  <Upload className="h-3 w-3 mr-1" />
+                                )}
+                                Carica
+                              </Button>
+                            )}
+                          </div>
                         )}
                       </div>
                     ))}
@@ -543,6 +625,22 @@ export function OverviewTab({ meeting, isAdmin }: Props) {
           </div>
         )}
       </div>
+      {/* Hidden file input for admin upload */}
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept=".pdf"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          const targetUserId = pendingUploadUserId.current;
+          if (file && targetUserId) {
+            handleAdminUpload(file, targetUserId);
+          }
+          pendingUploadUserId.current = null;
+          e.target.value = "";
+        }}
+      />
     </div>
   );
 }
