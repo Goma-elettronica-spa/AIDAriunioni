@@ -909,6 +909,7 @@ export type Database = {
           file_name: string
           file_size: number
           file_url: string
+          functional_area_id: string | null
           id: string
           meeting_id: string
           tenant_id: string
@@ -919,6 +920,7 @@ export type Database = {
           file_name: string
           file_size: number
           file_url: string
+          functional_area_id?: string | null
           id?: string
           meeting_id: string
           tenant_id: string
@@ -929,12 +931,20 @@ export type Database = {
           file_name?: string
           file_size?: number
           file_url?: string
+          functional_area_id?: string | null
           id?: string
           meeting_id?: string
           tenant_id?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "slide_uploads_functional_area_id_fkey"
+            columns: ["functional_area_id"]
+            isOneToOne: false
+            referencedRelation: "functional_areas"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "slide_uploads_meeting_id_fkey"
             columns: ["meeting_id"]

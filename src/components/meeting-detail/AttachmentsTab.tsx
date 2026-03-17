@@ -71,7 +71,7 @@ export function AttachmentsTab({ meeting }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("slide_uploads")
-        .select("id, user_id, file_name, file_url, file_size, created_at")
+        .select("id, user_id, file_name, file_url, file_size, created_at, functional_area_id")
         .eq("meeting_id", meetingId)
         .eq("tenant_id", tenantId)
         .order("created_at", { ascending: false });
@@ -157,7 +157,7 @@ export function AttachmentsTab({ meeting }: Props) {
       }
 
       setUploading(true);
-      const path = `${tenantId}/${meetingId}/${selectedUserId}.pdf`;
+      const path = `${tenantId}/${meetingId}/${selectedAreaId}_${selectedUserId}.pdf`;
 
       const { error: uploadError } = await supabase.storage
         .from("slides")
@@ -171,12 +171,13 @@ export function AttachmentsTab({ meeting }: Props) {
 
       const { data: urlData } = supabase.storage.from("slides").getPublicUrl(path);
 
-      // Check if exists
+      // Check if exists for this user+area+meeting
       const { data: existingSlide } = await supabase
         .from("slide_uploads")
         .select("id")
         .eq("meeting_id", meetingId)
         .eq("user_id", selectedUserId)
+        .eq("functional_area_id", selectedAreaId)
         .eq("tenant_id", tenantId)
         .maybeSingle();
 
@@ -194,6 +195,7 @@ export function AttachmentsTab({ meeting }: Props) {
           meeting_id: meetingId,
           user_id: selectedUserId,
           tenant_id: tenantId,
+          functional_area_id: selectedAreaId,
           file_name: file.name,
           file_size: file.size,
           file_url: urlData.publicUrl,
@@ -208,9 +210,15 @@ export function AttachmentsTab({ meeting }: Props) {
     [meetingId, selectedUserId, selectedAreaId, tenantId, queryClient]
   );
 
-  const handleAdminDelete = async (slideId: string, slideUserId: string) => {
-    const path = `${tenantId}/${meetingId}/${slideUserId}.pdf`;
-    await supabase.storage.from("slides").remove([path]);
+  const handleAdminDelete = async (slideId: string, fileUrl: string) => {
+    // Extract storage path from the public URL to delete the file
+    try {
+      const urlObj = new URL(fileUrl);
+      const pathMatch = urlObj.pathname.match(/\/storage\/v1\/object\/public\/slides\/(.+)/);
+      if (pathMatch) {
+        await supabase.storage.from("slides").remove([decodeURIComponent(pathMatch[1])]);
+      }
+    } catch { /* ignore URL parse errors */ }
     await supabase.from("slide_uploads").delete().eq("id", slideId);
     queryClient.invalidateQueries({ queryKey: ["attachments-slides"] });
     toast({ title: "Allegato eliminato" });
@@ -226,11 +234,12 @@ export function AttachmentsTab({ meeting }: Props) {
   const allAreas = areasQuery.data ?? [];
   const allUsers = allUsersQuery.data ?? [];
 
-  // Build user → slides map
-  const userSlides = new Map<string, typeof slides>();
+  // Build (area_id, user_id) → slides map
+  const areaUserSlides = new Map<string, typeof slides>();
   for (const s of slides) {
-    if (!userSlides.has(s.user_id)) userSlides.set(s.user_id, []);
-    userSlides.get(s.user_id)!.push(s);
+    const key = `${s.functional_area_id ?? "none"}:${s.user_id}`;
+    if (!areaUserSlides.has(key)) areaUserSlides.set(key, []);
+    areaUserSlides.get(key)!.push(s);
   }
 
   // Build user → area map
@@ -265,7 +274,7 @@ export function AttachmentsTab({ meeting }: Props) {
         id: u.id,
         fullName: u.full_name,
         jobTitle: u.job_title,
-        files: userSlides.get(u.id) ?? [],
+        files: areaUserSlides.get(`${area.id}:${u.id}`) ?? [],
       })),
     });
   }
@@ -279,7 +288,7 @@ export function AttachmentsTab({ meeting }: Props) {
         id: u.id,
         fullName: u.full_name,
         jobTitle: u.job_title,
-        files: userSlides.get(u.id) ?? [],
+        files: areaUserSlides.get(`none:${u.id}`) ?? [],
       })),
     });
   }
@@ -442,7 +451,7 @@ export function AttachmentsTab({ meeting }: Props) {
                                     variant="ghost"
                                     size="icon"
                                     className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
-                                    onClick={() => handleAdminDelete(f.id, f.user_id)}
+                                    onClick={() => handleAdminDelete(f.id, f.file_url)}
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
