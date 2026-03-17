@@ -2106,7 +2106,7 @@ export default function TeamPage() {
       <KpiManagementSheet
         open={!!kpiArea}
         onOpenChange={(open) => !open && setKpiArea(null)}
-        areaId={kpiArea?.id ?? ""}
+        areaId={kpiArea?.id ?? null}
         areaName={kpiArea?.name ?? ""}
         tenantId={tenantId!}
       />
