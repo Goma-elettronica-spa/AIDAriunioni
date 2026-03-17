@@ -161,59 +161,70 @@ export function MaterialeTab({ meeting, isAdmin }: Props) {
     setSaving(false);
   };
 
+  const handleSummaryTextUpload = async (file: File) => {
+    const ext = getFileExtension(file.name);
+    if (![".txt", ".md"].includes(ext)) {
+      toast({ title: "Formato non supportato. Usa file .txt o .md", variant: "destructive" });
+      return;
+    }
+    setUploadingSummary(true);
+    try {
+      const text = await file.text();
+      await saveSummary(text);
+    } catch (err: any) {
+      toast({ title: "Errore lettura file", description: err.message, variant: "destructive" });
+    }
+    setUploadingSummary(false);
+  };
+
+  const handleSummaryPdfUpload = async (file: File) => {
+    const ext = getFileExtension(file.name);
+    if (ext !== ".pdf") {
+      toast({ title: "Formato non supportato. Usa file .pdf", variant: "destructive" });
+      return;
+    }
+    setUploadingPdf(true);
+    try {
+      const path = `${meeting.tenant_id}/${meeting.id}/summary_${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from("documents").getPublicUrl(path);
+
+      const { error: updateError } = await supabase
+        .from("meetings")
+        .update({ summary_pdf_url: urlData.publicUrl })
+        .eq("id", meeting.id);
+      if (updateError) throw updateError;
+
+      queryClient.invalidateQueries({ queryKey: ["meeting-detail", meeting.id] });
+      writeAuditLog({
+        tenantId: meeting.tenant_id,
+        userId: user!.id,
+        action: "update",
+        entityType: "meeting_summary",
+        entityId: meeting.id,
+        oldValues: { summary_pdf_url: summaryPdfUrl },
+        newValues: { summary_pdf_url: urlData.publicUrl },
+      });
+      toast({ title: "PDF riassunto caricato" });
+    } catch (err: any) {
+      toast({ title: "Errore upload PDF", description: err.message, variant: "destructive" });
+    }
+    setUploadingPdf(false);
+  };
+
   const handleSummaryFileUpload = async (file: File) => {
     const ext = getFileExtension(file.name);
-
-    // PDF upload -> store in Supabase Storage, save URL
     if (ext === ".pdf") {
-      setUploadingSummary(true);
-      try {
-        const path = `${meeting.tenant_id}/${meeting.id}/summary_${file.name}`;
-        const { error: uploadError } = await supabase.storage
-          .from("documents")
-          .upload(path, file, { upsert: true });
-        if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage.from("documents").getPublicUrl(path);
-
-        const { error: updateError } = await supabase
-          .from("meetings")
-          .update({ summary_pdf_url: urlData.publicUrl })
-          .eq("id", meeting.id);
-        if (updateError) throw updateError;
-
-        queryClient.invalidateQueries({ queryKey: ["meeting-detail", meeting.id] });
-        writeAuditLog({
-          tenantId: meeting.tenant_id,
-          userId: user!.id,
-          action: "update",
-          entityType: "meeting_summary",
-          entityId: meeting.id,
-          oldValues: { summary_pdf_url: summaryPdfUrl },
-          newValues: { summary_pdf_url: urlData.publicUrl },
-        });
-        toast({ title: "PDF riassunto caricato" });
-      } catch (err: any) {
-        toast({ title: "Errore upload PDF", description: err.message, variant: "destructive" });
-      }
-      setUploadingSummary(false);
-      return;
+      await handleSummaryPdfUpload(file);
+    } else if ([".txt", ".md"].includes(ext)) {
+      await handleSummaryTextUpload(file);
+    } else {
+      toast({ title: "Formato non supportato. Usa file .pdf, .md o .txt", variant: "destructive" });
     }
-
-    // .md / .txt -> read content and save as text
-    if ([".txt", ".md"].includes(ext)) {
-      setUploadingSummary(true);
-      try {
-        const text = await file.text();
-        await saveSummary(text);
-      } catch (err: any) {
-        toast({ title: "Errore lettura file", description: err.message, variant: "destructive" });
-      }
-      setUploadingSummary(false);
-      return;
-    }
-
-    toast({ title: "Formato non supportato. Usa file .pdf, .md o .txt", variant: "destructive" });
   };
 
   const shareSummaryWithTeam = async () => {
