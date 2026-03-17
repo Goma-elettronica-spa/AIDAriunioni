@@ -334,7 +334,7 @@ export function UpgradeTab({ meetingId, tenantId, isAdmin, summaryText, transcri
           reason_why: edit.reason_why,
           value_unit: edit.value_unit,
           value_amount: parseFloat(edit.value_amount) || 0,
-          linked_kpi_id: edit.linked_kpi_id || null,
+          linked_kpi_id: edit.linked_kpi_id && edit.linked_kpi_id !== "none" ? edit.linked_kpi_id : null,
           status: "todo",
         })
         .eq("id", su.id);
