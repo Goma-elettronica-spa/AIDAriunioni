@@ -537,7 +537,7 @@ export default function TeamPage() {
   const [invTitle, setInvTitle] = useState("");
   const [invBoardRoleId, setInvBoardRoleId] = useState("");
   const [invRole, setInvRole] = useState("dirigente");
-  const [invAreaIds, setInvAreaIds] = useState<string[]>([]);
+  const [invAreaId, setInvAreaId] = useState("");
 
   // Edit dialog
   const [editOpen, setEditOpen] = useState(false);
