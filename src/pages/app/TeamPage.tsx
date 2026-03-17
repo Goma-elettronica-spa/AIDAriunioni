@@ -1623,16 +1623,7 @@ export default function TeamPage() {
                       <TableCell>
                         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                           {u.invite_status === "invited" && !u.first_login_at && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => resendInviteMutation.mutate(u.email)}
-                              disabled={resendInviteMutation.isPending}
-                              title="Reinvia invito"
-                            >
-                              <Mail className="h-3.5 w-3.5" />
-                            </Button>
+                            <span className="text-xs text-muted-foreground px-2">In attesa di registrazione</span>
                           )}
                           <Button
                             variant="ghost"
