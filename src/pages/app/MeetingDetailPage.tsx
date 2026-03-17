@@ -375,7 +375,7 @@ export default function MeetingDetailPage() {
               />
             </TabsContent>
             <TabsContent value="kpi">
-              <KpiTab meetingId={m.id} tenantId={m.tenant_id} />
+              <KpiTab meetingId={m.id} tenantId={m.tenant_id} isAdmin={isAdmin} scheduledDate={m.scheduled_date} />
             </TabsContent>
           </div>
         </Tabs>
