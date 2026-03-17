@@ -454,7 +454,7 @@ export default function MeetingsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Deadline Pre-Meeting</Label>
+              <Label>Data Apertura Upload</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -467,7 +467,7 @@ export default function MeetingsPage() {
                     <CalendarIcon className="h-4 w-4 mr-2" />
                     {deadline
                       ? format(deadline, "PPP", { locale: it })
-                      : "Seleziona deadline"}
+                      : "Seleziona data"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">

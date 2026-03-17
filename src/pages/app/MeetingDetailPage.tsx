@@ -426,7 +426,7 @@ export default function MeetingDetailPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-deadline">Deadline Pre-Meeting</Label>
+              <Label htmlFor="edit-deadline">Data Apertura Upload</Label>
               <Input
                 id="edit-deadline"
                 type="date"
