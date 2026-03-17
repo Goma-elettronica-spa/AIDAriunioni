@@ -506,6 +506,52 @@ export type Database = {
           },
         ]
       }
+      kpi_definition_users: {
+        Row: {
+          created_at: string
+          id: string
+          kpi_id: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kpi_id: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kpi_id?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_definition_users_kpi_id_fkey"
+            columns: ["kpi_id"]
+            isOneToOne: false
+            referencedRelation: "kpi_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_definition_users_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_definition_users_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kpi_definitions: {
         Row: {
           created_at: string
@@ -514,6 +560,7 @@ export type Database = {
           functional_area_id: string | null
           id: string
           is_active: boolean
+          is_company_wide: boolean
           is_required: boolean
           name: string
           target_value: number | null
@@ -529,6 +576,7 @@ export type Database = {
           functional_area_id?: string | null
           id?: string
           is_active?: boolean
+          is_company_wide?: boolean
           is_required?: boolean
           name: string
           target_value?: number | null
@@ -544,6 +592,7 @@ export type Database = {
           functional_area_id?: string | null
           id?: string
           is_active?: boolean
+          is_company_wide?: boolean
           is_required?: boolean
           name?: string
           target_value?: number | null
