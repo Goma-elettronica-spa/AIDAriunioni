@@ -124,21 +124,24 @@ export function AttachmentsTab({ meeting }: Props) {
     },
   });
 
-  // Users in selected area (for admin upload)
-  const usersInSelectedArea = useQuery({
-    queryKey: ["attachments-users-in-area", selectedAreaId, tenantId],
-    enabled: !!selectedAreaId && selectedAreaId !== "",
+  // Auto-resolve user for selected area (1:1 relationship)
+  const userInSelectedArea = useQuery({
+    queryKey: ["attachments-user-in-area", selectedAreaId, tenantId],
+    enabled: !!selectedAreaId,
     queryFn: async () => {
-      const { data: ufaRows, error } = await supabase
+      const { data, error } = await supabase
         .from("user_functional_areas")
         .select("user_id")
         .eq("functional_area_id", selectedAreaId)
-        .eq("tenant_id", tenantId);
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
       if (error) throw error;
-      const userIds = (ufaRows ?? []).map((r) => r.user_id);
-      return userIds;
+      return data?.user_id ?? null;
     },
   });
+
+  // Keep resolvedUserId in sync
+  const effectiveUserId = userInSelectedArea.data ?? "";
 
   // Admin upload handler
   const handleAdminUpload = useCallback(
