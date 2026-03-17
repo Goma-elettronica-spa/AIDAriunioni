@@ -197,6 +197,10 @@ export function KpiSection({
     setKpis(
       definitions.data.map((d: any) => {
         const existing = entryMap.get(d.id);
+        const areaId = d.functional_area_id ?? (d.is_company_wide ? "__company__" : "__direct__");
+        const areaName = d.functional_area_id
+          ? (areaNameMap.get(d.functional_area_id) ?? "")
+          : (d.is_company_wide ? "Aziendale" : "Assegnato");
         return {
           kpiId: d.id,
           name: d.name,
@@ -208,8 +212,8 @@ export function KpiSection({
           previousValue: prevMap.get(d.id) ?? null,
           entryId: existing?.id ?? null,
           variances: existing ? (varianceMap.get(existing.id) ?? []) : [],
-          areaName: areaNameMap.get(d.functional_area_id) ?? "",
-          areaId: d.functional_area_id,
+          areaName,
+          areaId,
         };
       })
     );
