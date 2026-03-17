@@ -285,8 +285,15 @@ export default function KpiManagementSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-lg overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>KPI di {areaName}</SheetTitle>
+          <SheetTitle>
+            {areaId ? `KPI di ${areaName}` : "KPI Aziendali"}
+          </SheetTitle>
           <SheetDescription>
+            {!areaId && (
+              <Badge variant="outline" className="mb-1 text-xs">
+                Aziendali — non assegnati a nessuna area funzionale
+              </Badge>
+            )}
             {activeCount > 0
               ? `${activeCount} KPI attiv${activeCount === 1 ? "o" : "i"}`
               : "Nessun KPI attivo"}
