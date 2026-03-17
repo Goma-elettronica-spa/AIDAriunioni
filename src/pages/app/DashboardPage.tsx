@@ -23,6 +23,13 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 
+const roleLabels: Record<string, string> = {
+  org_admin: "Admin",
+  information_officer: "Information Officer",
+  dirigente: "Dirigente",
+  superadmin: "Superadmin",
+};
+
 const meetingStatusConfig: Record<string, { label: string; dotClass: string }> = {
   draft: { label: "Bozza", dotClass: "bg-muted-foreground" },
   pre_meeting: { label: "Pre-Meeting", dotClass: "bg-[hsl(var(--status-waiting))]" },
@@ -402,7 +409,7 @@ export default function DashboardPage() {
             <span className="text-sm text-muted-foreground">{tenantName}</span>
           )}
           <Badge variant="secondary" className="text-xs font-normal">
-            {user?.role}
+            {roleLabels[user?.role ?? ""] ?? user?.role}
           </Badge>
         </div>
       </div>
@@ -846,7 +853,7 @@ export default function DashboardPage() {
             variant="ghost"
             size="sm"
             className="text-muted-foreground"
-            onClick={() => navigate("/kpi")}
+            onClick={() => navigate("/board")}
           >
             Vedi tutti
             <ArrowRight className="h-3.5 w-3.5 ml-1" />
