@@ -1452,18 +1452,6 @@ export default function TeamPage() {
             </button>
           )}
 
-          {/* Separator + KPI Aziendali button */}
-          <div className="ml-auto">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => setKpiArea({ id: null, name: "Aziendali" })}
-            >
-              <BarChart3 className="h-3 w-3 mr-1" />
-              KPI Aziendali
-            </Button>
-          </div>
         </div>
       )}
 
