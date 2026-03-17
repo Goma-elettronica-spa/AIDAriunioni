@@ -51,6 +51,9 @@ export function MaterialeTab({ meeting, isAdmin }: Props) {
   const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [uploadingSummary, setUploadingSummary] = useState(false);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const summaryTextInputRef = useRef<HTMLInputElement>(null);
+  const summaryPdfInputRef = useRef<HTMLInputElement>(null);
   const summaryFileInputRef = useRef<HTMLInputElement>(null);
 
   const summaryText = meeting.summary_text ?? null;
