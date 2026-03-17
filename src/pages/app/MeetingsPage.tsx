@@ -155,6 +155,9 @@ export default function MeetingsPage() {
     setTitle(`Riunione Prima Linea - ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}`);
     setScheduledDate(undefined);
     setDeadline(undefined);
+    const now = new Date();
+    const q = Math.ceil((now.getMonth() + 1) / 3);
+    setSelectedQuarter(`Q${q}-${now.getFullYear()}`);
     setCreateOpen(true);
   };
 
