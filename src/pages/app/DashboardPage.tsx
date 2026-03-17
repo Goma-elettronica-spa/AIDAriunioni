@@ -95,7 +95,7 @@ export default function DashboardPage() {
         .limit(1)
         .maybeSingle();
       if (fbErr) throw fbErr;
-      return data;
+      return fallback;
     },
   });
 
