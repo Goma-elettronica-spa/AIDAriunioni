@@ -120,7 +120,95 @@ function DeltaBadge({
   );
 }
 
-// ─── KPI Card (used in Section 1 & 3) ────────────────────────────────────────
+// ─── KPI History Chart ───────────────────────────────────────────────────────
+
+function KpiHistoryChart({
+  entries,
+  unit,
+  targetValue,
+}: {
+  entries: KpiEntryWithMeeting[];
+  unit: string;
+  targetValue: number | null;
+}) {
+  const chartData = entries
+    .slice()
+    .reverse()
+    .map((e) => ({
+      date: new Date(e.meeting_date).toLocaleDateString("it-IT", {
+        day: "2-digit",
+        month: "short",
+      }),
+      value: e.current_value,
+      fullDate: e.meeting_date,
+    }));
+
+  if (chartData.length === 0) return null;
+
+  const allValues = chartData.map((d) => d.value);
+  if (targetValue != null) allValues.push(targetValue);
+  const minVal = Math.min(...allValues);
+  const maxVal = Math.max(...allValues);
+  const padding = (maxVal - minVal) * 0.15 || 1;
+
+  return (
+    <div className="h-[220px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+          <XAxis
+            dataKey="date"
+            tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+            axisLine={{ stroke: "hsl(var(--border))" }}
+            tickLine={false}
+          />
+          <YAxis
+            domain={[Math.floor(minVal - padding), Math.ceil(maxVal + padding)]}
+            tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+            axisLine={{ stroke: "hsl(var(--border))" }}
+            tickLine={false}
+            tickFormatter={(v: number) => formatNumber(v, unit)}
+            width={60}
+          />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: "hsl(var(--card))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: "8px",
+              fontSize: "12px",
+            }}
+            formatter={(value: number) => [formatNumber(value, unit), "Valore"]}
+            labelFormatter={(label: string) => label}
+          />
+          {targetValue != null && (
+            <ReferenceLine
+              y={targetValue}
+              stroke="hsl(var(--primary))"
+              strokeDasharray="6 4"
+              strokeWidth={1.5}
+              label={{
+                value: `Obiettivo: ${formatNumber(targetValue, unit)}`,
+                position: "insideTopRight",
+                fill: "hsl(var(--primary))",
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            />
+          )}
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke="hsl(var(--foreground))"
+            strokeWidth={2}
+            dot={{ r: 4, fill: "hsl(var(--foreground))", stroke: "hsl(var(--background))", strokeWidth: 2 }}
+            activeDot={{ r: 6, fill: "hsl(var(--foreground))" }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 
 function KpiCard({
   kpi,
