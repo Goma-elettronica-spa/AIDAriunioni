@@ -26,6 +26,66 @@ export function OverviewTab({ meeting, isAdmin }: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [uploadingForUser, setUploadingForUser] = useState<string | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const pendingUploadUserId = useRef<string | null>(null);
+
+  const handleAdminUpload = useCallback(
+    async (file: File, targetUserId: string) => {
+      if (file.type !== "application/pdf") {
+        toast({ title: "Solo file PDF", variant: "destructive" });
+        return;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        toast({ title: "File troppo grande (max 50MB)", variant: "destructive" });
+        return;
+      }
+      setUploadingForUser(targetUserId);
+      const path = `${tenantId}/${meetingId}/${targetUserId}.pdf`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("slides")
+        .upload(path, file, { upsert: true });
+
+      if (uploadError) {
+        toast({ title: "Errore upload", description: uploadError.message, variant: "destructive" });
+        setUploadingForUser(null);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage.from("slides").getPublicUrl(path);
+
+      const { data: existingSlide } = await supabase
+        .from("slide_uploads")
+        .select("id")
+        .eq("meeting_id", meetingId)
+        .eq("user_id", targetUserId)
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+
+      if (existingSlide?.id) {
+        await supabase
+          .from("slide_uploads")
+          .update({ file_name: file.name, file_size: file.size, file_url: urlData.publicUrl })
+          .eq("id", existingSlide.id);
+      } else {
+        await supabase.from("slide_uploads").insert({
+          meeting_id: meetingId,
+          user_id: targetUserId,
+          tenant_id: tenantId,
+          file_name: file.name,
+          file_size: file.size,
+          file_url: urlData.publicUrl,
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["overview-slides"] });
+      queryClient.invalidateQueries({ queryKey: ["attachments-slides"] });
+      setUploadingForUser(null);
+      toast({ title: "Allegato caricato" });
+    },
+    [meetingId, tenantId, queryClient]
+  );
 
   // Fetch dirigenti
   const dirigenti = useQuery({
