@@ -4,6 +4,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sparkline } from "@/components/ui/sparkline";
 import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ReferenceLine,
+  ResponsiveContainer,
+} from "recharts";
+import {
   ArrowUp,
   ArrowDown,
   TrendingUp,
@@ -110,7 +120,95 @@ function DeltaBadge({
   );
 }
 
-// ─── KPI Card (used in Section 1 & 3) ────────────────────────────────────────
+// ─── KPI History Chart ───────────────────────────────────────────────────────
+
+function KpiHistoryChart({
+  entries,
+  unit,
+  targetValue,
+}: {
+  entries: KpiEntryWithMeeting[];
+  unit: string;
+  targetValue: number | null;
+}) {
+  const chartData = entries
+    .slice()
+    .reverse()
+    .map((e) => ({
+      date: new Date(e.meeting_date).toLocaleDateString("it-IT", {
+        day: "2-digit",
+        month: "short",
+      }),
+      value: e.current_value,
+      fullDate: e.meeting_date,
+    }));
+
+  if (chartData.length === 0) return null;
+
+  const allValues = chartData.map((d) => d.value);
+  if (targetValue != null) allValues.push(targetValue);
+  const minVal = Math.min(...allValues);
+  const maxVal = Math.max(...allValues);
+  const padding = (maxVal - minVal) * 0.15 || 1;
+
+  return (
+    <div className="h-[220px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+          <XAxis
+            dataKey="date"
+            tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+            axisLine={{ stroke: "hsl(var(--border))" }}
+            tickLine={false}
+          />
+          <YAxis
+            domain={[Math.floor(minVal - padding), Math.ceil(maxVal + padding)]}
+            tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+            axisLine={{ stroke: "hsl(var(--border))" }}
+            tickLine={false}
+            tickFormatter={(v: number) => formatNumber(v, unit)}
+            width={60}
+          />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: "hsl(var(--card))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: "8px",
+              fontSize: "12px",
+            }}
+            formatter={(value: number) => [formatNumber(value, unit), "Valore"]}
+            labelFormatter={(label: string) => label}
+          />
+          {targetValue != null && (
+            <ReferenceLine
+              y={targetValue}
+              stroke="hsl(var(--primary))"
+              strokeDasharray="6 4"
+              strokeWidth={1.5}
+              label={{
+                value: `Obiettivo: ${formatNumber(targetValue, unit)}`,
+                position: "insideTopRight",
+                fill: "hsl(var(--primary))",
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            />
+          )}
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke="hsl(var(--foreground))"
+            strokeWidth={2}
+            dot={{ r: 4, fill: "hsl(var(--foreground))", stroke: "hsl(var(--background))", strokeWidth: 2 }}
+            activeDot={{ r: 6, fill: "hsl(var(--foreground))" }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 
 function KpiCard({
   kpi,
@@ -214,104 +312,16 @@ function KpiCard({
               </div>
             )}
 
-            {sparkValues.length > 1 && (
+            {entries.length > 0 && (
               <div className="mb-4">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                   Storico
                 </p>
-                <div className="text-muted-foreground">
-                  <Sparkline values={sparkValues} width={320} height={64} />
-                </div>
-              </div>
-            )}
-
-            {last6.length > 0 && (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Data</TableHead>
-                      <TableHead className="text-right">Valore</TableHead>
-                      <TableHead className="text-right">Delta</TableHead>
-                      <TableHead>Stato</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {last6.map((entry) => {
-                      const explanations = varianceMap.get(entry.id) ?? [];
-                      return (
-                        <TableRow key={entry.id}>
-                          <TableCell>
-                            <span className="text-sm">
-                              {entry.meeting_title ||
-                                new Date(entry.meeting_date).toLocaleDateString("it-IT", {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                })}
-                            </span>
-                            {explanations.length > 0 && (
-                              <div className="mt-1 space-y-0.5 pl-3 border-l border-border">
-                                {explanations.map((exp) => (
-                                  <p key={exp.id} className="text-xs text-muted-foreground">
-                                    Causa: {exp.reason}
-                                    {exp.delta_portion != null && (
-                                      <span>
-                                        {" "}
-                                        &mdash; {exp.delta_portion > 0 ? "+" : ""}
-                                        {exp.delta_portion.toLocaleString("it-IT")} ({exp.direction})
-                                      </span>
-                                    )}
-                                  </p>
-                                ))}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {formatNumber(entry.current_value, kpi.unit)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {entry.delta != null ? (
-                              <span
-                                className={
-                                  entry.is_improved === true
-                                    ? "text-emerald-600"
-                                    : "text-red-600"
-                                }
-                              >
-                                {entry.delta > 0 ? "+" : ""}
-                                {entry.delta.toLocaleString("it-IT")}
-                                {entry.delta_percent != null && (
-                                  <span className="ml-1 text-xs">
-                                    ({entry.delta_percent > 0 ? "+" : ""}
-                                    {entry.delta_percent.toFixed(1)}%)
-                                  </span>
-                                )}
-                              </span>
-                            ) : (
-                              "\u2014"
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {entry.is_improved === true ? (
-                              <Badge variant="secondary" className="inline-flex items-center text-emerald-600 text-xs">
-                                <ArrowUp className="h-3 w-3 mr-0.5" />
-                                Migliorato
-                              </Badge>
-                            ) : entry.is_improved === false ? (
-                              <Badge variant="secondary" className="inline-flex items-center text-red-600 text-xs">
-                                <ArrowDown className="h-3 w-3 mr-0.5" />
-                                Peggiorato
-                              </Badge>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">\u2014</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+                <KpiHistoryChart
+                  entries={entries}
+                  unit={kpi.unit}
+                  targetValue={kpi.target_value}
+                />
               </div>
             )}
           </CardContent>
@@ -335,6 +345,7 @@ function MiniKpiCard({
     unit: string;
     latest: any;
     sparkValues: number[];
+    historyEntries?: KpiEntryWithMeeting[];
     areaName?: string;
     targetValue?: number | null;
   };
@@ -417,13 +428,29 @@ function MiniKpiCard({
         </CardContent>
       </Card>
 
-      {expanded && kpi.description && (
+      {expanded && (
         <Card className="border border-border mt-2">
           <CardContent className="p-6">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-              Descrizione
-            </p>
-            <p className="text-sm text-foreground">{kpi.description}</p>
+            {kpi.description && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                  Descrizione
+                </p>
+                <p className="text-sm text-foreground">{kpi.description}</p>
+              </div>
+            )}
+            {(kpi.historyEntries ?? []).length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  Storico
+                </p>
+                <KpiHistoryChart
+                  entries={kpi.historyEntries!}
+                  unit={kpi.unit}
+                  targetValue={kpi.targetValue ?? null}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -866,6 +893,22 @@ function AllUsersKpiSection({ tenantId }: { tenantId: string }) {
               .reverse()
               .slice(-12)
               .map((e: any) => e.current_value);
+            const historyEntries: KpiEntryWithMeeting[] = kpiEntries
+              .slice()
+              .reverse()
+              .slice(-12)
+              .map((e: any) => ({
+                id: e.id,
+                kpi_id: e.kpi_id,
+                current_value: e.current_value,
+                previous_value: null,
+                delta: e.delta ?? null,
+                delta_percent: e.delta_percent ?? null,
+                is_improved: e.is_improved ?? null,
+                meeting_id: e.meeting_id,
+                meeting_title: "",
+                meeting_date: e.meetings?.scheduled_date ?? "",
+              }));
             kpis.push({
               id: `${d.id}-${u.id}`,
               name: d.name,
@@ -873,7 +916,8 @@ function AllUsersKpiSection({ tenantId }: { tenantId: string }) {
               unit: d.unit,
               targetValue: (d as any).target_value ?? null,
               latest,
-              sparkValues,
+              sparkValues: historyEntries.map((e) => e.current_value),
+              historyEntries,
               areaName: areaMap.get(areaId) ?? "",
             });
           }
