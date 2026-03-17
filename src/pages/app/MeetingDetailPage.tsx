@@ -350,11 +350,11 @@ export default function MeetingDetailPage() {
             <TabsContent value="overview">
               <OverviewTab meeting={m} isAdmin={isAdmin} />
             </TabsContent>
-            <TabsContent value="attachments">
-              <MaterialeTab meeting={m} isAdmin={isAdmin} />
+          <TabsContent value="attachments">
+              <AttachmentsTab meeting={m} />
             </TabsContent>
             <TabsContent value="post_meeting">
-              <PostMeetingTab meeting={m} />
+              <MaterialeTab meeting={m} isAdmin={isAdmin} />
             </TabsContent>
             <TabsContent value="tasks">
               <TasksTab
