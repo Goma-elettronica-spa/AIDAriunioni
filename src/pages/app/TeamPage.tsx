@@ -677,6 +677,22 @@ export default function TeamPage() {
     },
   });
 
+  const companyKpis = useQuery({
+    queryKey: ["kpi-company", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("kpi_definitions")
+        .select("*")
+        .eq("tenant_id", tenantId!)
+        .is("functional_area_id", null)
+        .eq("is_active", true)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const latestEntries = useQuery({
     queryKey: ["kpi-latest-entries", tenantId],
     enabled: !!tenantId,
