@@ -80,50 +80,6 @@ export function OverviewTab({ meeting, isAdmin }: Props) {
     },
   });
 
-  // Fetch slide uploads with user info for "Allegati per Area"
-  const slideUploads = useQuery({
-    queryKey: ["overview-slide-uploads", meetingId, tenantId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("slide_uploads")
-        .select("id, user_id, file_name, file_url")
-        .eq("meeting_id", meetingId)
-        .eq("tenant_id", tenantId);
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-
-  // Fetch user functional areas
-  const userFunctionalAreas = useQuery({
-    queryKey: ["overview-user-functional-areas", tenantId],
-    enabled: !!dirigenti.data,
-    queryFn: async () => {
-      const userIds = dirigenti.data!.map((d) => d.id);
-      if (!userIds.length) return { userAreas: [] as { user_id: string; functional_area_id: string }[], areas: [] as { id: string; name: string }[] };
-
-      const { data: ufa, error: ufaError } = await supabase
-        .from("user_functional_areas")
-        .select("user_id, functional_area_id")
-        .in("user_id", userIds);
-      if (ufaError) throw ufaError;
-
-      const areaIds = [...new Set((ufa ?? []).map((r) => r.functional_area_id))];
-      let areas: { id: string; name: string }[] = [];
-      if (areaIds.length) {
-        const { data: aData, error: aError } = await supabase
-          .from("functional_areas")
-          .select("id, name")
-          .in("id", areaIds)
-          .order("name");
-        if (aError) throw aError;
-        areas = aData ?? [];
-      }
-
-      return { userAreas: ufa ?? [], areas };
-    },
-  });
-
   // Fetch existing brief
   const briefQuery = useQuery({
     queryKey: ["meeting-brief", meetingId],
