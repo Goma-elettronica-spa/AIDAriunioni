@@ -71,7 +71,7 @@ export function AttachmentsTab({ meeting }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("slide_uploads")
-        .select("id, user_id, file_name, file_url, file_size, created_at")
+        .select("id, user_id, file_name, file_url, file_size, created_at, functional_area_id")
         .eq("meeting_id", meetingId)
         .eq("tenant_id", tenantId)
         .order("created_at", { ascending: false });
