@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   UserPlus, Pencil, Power, Check, X, BarChart3, ChevronDown, ChevronRight,
   Plus, EyeOff, Mail, CheckCircle, Clock, TrendingUp, TrendingDown,
+  ArrowUp, ArrowDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,9 @@ import {
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Card, CardHeader, CardContent,
+} from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { writeAuditLog } from "@/lib/audit";
 import KpiManagementSheet from "@/components/team/KpiManagementSheet";
@@ -281,6 +285,42 @@ function InlineKpiValue({
       }}
     >
       {displayValue}
+    </span>
+  );
+}
+
+// ── Delta % display ──────────────────────────────────────────────────────
+
+function KpiDeltaBadge({
+  deltaPercent,
+  direction,
+}: {
+  deltaPercent: number | null | undefined;
+  direction: string;
+}) {
+  if (deltaPercent == null) {
+    return <span className="text-sm text-muted-foreground">&mdash;</span>;
+  }
+
+  const isPositive = deltaPercent > 0;
+  const isNegative = deltaPercent < 0;
+  const upIsGood = direction === "up_is_good";
+
+  // Determine color: green if the delta is "good", red if "bad"
+  let colorClass = "text-muted-foreground";
+  if (isPositive) {
+    colorClass = upIsGood ? "text-green-600" : "text-red-600";
+  } else if (isNegative) {
+    colorClass = upIsGood ? "text-red-600" : "text-green-600";
+  }
+
+  const formatted = `${isPositive ? "+" : ""}${deltaPercent.toFixed(1)}%`;
+
+  return (
+    <span className={`flex items-center gap-1 text-sm font-medium ${colorClass}`}>
+      {formatted}
+      {isPositive && <ArrowUp className="h-3.5 w-3.5" />}
+      {isNegative && <ArrowDown className="h-3.5 w-3.5" />}
     </span>
   );
 }
@@ -1579,117 +1619,156 @@ export default function TeamPage() {
                       </TableCell>
                     </TableRow>
 
-                    {/* Expanded KPI section — READ-ONLY view of user's area KPIs */}
+                    {/* Expanded KPI section — grouped by functional area with delta % */}
                     {isExpanded && (
                       <TableRow key={`${u.id}-kpis`}>
                         <TableCell colSpan={9} className="p-0 bg-muted/20">
                           <div className="p-6">
-                            {visibleKpis.length === 0 ? (
+                            {uAreaIds.length === 0 ? (
                               <p className="text-sm text-muted-foreground text-center py-4">
-                                Nessun KPI {showHiddenKpis ? "" : "attivo "}per questo utente.
+                                Nessuna area funzionale assegnata a questo utente.
                               </p>
                             ) : (
-                              <div className="border border-border rounded-lg overflow-hidden">
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow className="bg-muted/30">
-                                      <TableHead className="text-xs">KPI Nome</TableHead>
-                                      <TableHead className="text-xs">Area</TableHead>
-                                      <TableHead className="text-xs">Unita'</TableHead>
-                                      <TableHead className="text-xs">Valore Attuale</TableHead>
-                                      <TableHead className="text-xs">Obbligatorio</TableHead>
-                                      <TableHead className="text-xs">Visibile</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {visibleKpis.map((kpi) => (
-                                      <TableRow
-                                        key={kpi.id}
-                                        className={!kpi.is_active ? "opacity-50" : ""}
-                                      >
-                                        <TableCell className="text-sm font-medium">
-                                          <div className="flex items-center gap-2">
-                                            {kpi.name}
-                                            {!kpi.is_active && (
-                                              <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
-                                            )}
-                                          </div>
-                                        </TableCell>
-                                        <TableCell>
-                                          <Badge variant="outline" className="inline-flex items-center text-xs">
-                                            {kpi.areaName}
-                                          </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                          <Badge variant="outline" className="inline-flex items-center text-xs">
-                                            {kpi.unit}
-                                          </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                          <InlineKpiValue
-                                            entry={entryMap.get(kpi.id)}
-                                            kpiId={kpi.id}
-                                            canEdit={canEditKpiValue(u.id)}
-                                            tenantId={tenantId!}
-                                            userId={u.id}
-                                          />
-                                        </TableCell>
-                                        <TableCell>
-                                          <div className="flex items-center gap-2">
-                                            <Switch
-                                              checked={kpi.is_required ?? true}
-                                              onCheckedChange={() =>
-                                                toggleRequiredMutation.mutate({
-                                                  id: kpi.id,
-                                                  is_required: kpi.is_required ?? true,
-                                                })
-                                              }
-                                              disabled={!isAdmin}
-                                            />
-                                          </div>
-                                        </TableCell>
-                                        <TableCell>
-                                          <div className="flex items-center gap-2">
-                                            <Switch
-                                              checked={kpi.is_active}
-                                              onCheckedChange={(checked) => {
-                                                if (!checked) {
-                                                  setConfirmHideKpi({ id: kpi.id, name: kpi.name });
-                                                } else {
-                                                  toggleKpiActiveMutation.mutate({
-                                                    id: kpi.id,
-                                                    is_active: kpi.is_active,
-                                                  });
-                                                }
-                                              }}
-                                              disabled={!isAdmin}
-                                            />
-                                          </div>
-                                        </TableCell>
-                                      </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
-                              </div>
-                            )}
-                            {/* Info: to manage KPIs, use the area-level "Gestisci KPI" button */}
-                            {isAdmin && uAreaIds.length > 0 && (
-                              <div className="flex items-center flex-wrap gap-2 mt-3">
-                                <span className="text-xs text-muted-foreground">Gestisci KPI per area:</span>
+                              <div className="space-y-4">
                                 {uAreaIds.map((areaId) => {
                                   const area = areas.find((a) => a.id === areaId);
                                   if (!area) return null;
+                                  const areaKpis = (kpisByArea[areaId] ?? []).filter(
+                                    (k) => showHiddenKpis || k.is_active
+                                  );
+
                                   return (
-                                    <Button
-                                      key={areaId}
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 text-xs"
-                                      onClick={() => setKpiArea({ id: area.id, name: area.name })}
-                                    >
-                                      <BarChart3 className="h-3 w-3 mr-1" />
-                                      {area.name}
-                                    </Button>
+                                    <Card key={areaId} className="border border-border">
+                                      <CardHeader className="bg-muted rounded-t-lg p-3">
+                                        <div className="flex items-center gap-2">
+                                          <Badge variant="secondary" className="inline-flex items-center text-xs font-medium">
+                                            {area.name}
+                                          </Badge>
+                                          <span className="text-xs text-muted-foreground">
+                                            {areaKpis.length} KPI
+                                          </span>
+                                          {isAdmin && (
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-6 px-2 text-[10px] ml-auto"
+                                              onClick={() => setKpiArea({ id: area.id, name: area.name })}
+                                            >
+                                              <Plus className="h-3 w-3 mr-1" />
+                                              Aggiungi KPI
+                                            </Button>
+                                          )}
+                                        </div>
+                                      </CardHeader>
+                                      <CardContent className="p-0">
+                                        {areaKpis.length === 0 ? (
+                                          <p className="text-sm text-muted-foreground text-center py-4">
+                                            Nessun KPI {showHiddenKpis ? "" : "attivo "}in quest'area.
+                                          </p>
+                                        ) : (
+                                          <Table>
+                                            <TableHeader>
+                                              <TableRow className="bg-muted/30">
+                                                <TableHead className="text-xs">KPI Nome</TableHead>
+                                                <TableHead className="text-xs">Unita'</TableHead>
+                                                <TableHead className="text-xs">Valore Attuale</TableHead>
+                                                <TableHead className="text-xs">Delta %</TableHead>
+                                                <TableHead className="text-xs">Obbligatorio</TableHead>
+                                                <TableHead className="text-xs">Visibile</TableHead>
+                                                <TableHead className="text-xs">Azioni</TableHead>
+                                              </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                              {areaKpis.map((kpi) => {
+                                                const entry = entryMap.get(kpi.id);
+                                                return (
+                                                  <TableRow
+                                                    key={kpi.id}
+                                                    className={!kpi.is_active ? "opacity-50" : ""}
+                                                  >
+                                                    <TableCell className="text-sm font-medium">
+                                                      <div className="flex items-center gap-2">
+                                                        {kpi.name}
+                                                        {!kpi.is_active && (
+                                                          <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                                                        )}
+                                                      </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <Badge variant="outline" className="inline-flex items-center text-xs">
+                                                        {kpi.unit}
+                                                      </Badge>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <InlineKpiValue
+                                                        entry={entry}
+                                                        kpiId={kpi.id}
+                                                        canEdit={canEditKpiValue(u.id)}
+                                                        tenantId={tenantId!}
+                                                        userId={u.id}
+                                                      />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <KpiDeltaBadge
+                                                        deltaPercent={entry?.delta_percent}
+                                                        direction={kpi.direction}
+                                                      />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <div className="flex items-center gap-2">
+                                                        <Switch
+                                                          checked={kpi.is_required ?? true}
+                                                          onCheckedChange={() =>
+                                                            toggleRequiredMutation.mutate({
+                                                              id: kpi.id,
+                                                              is_required: kpi.is_required ?? true,
+                                                            })
+                                                          }
+                                                          disabled={!isAdmin}
+                                                        />
+                                                      </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <div className="flex items-center gap-2">
+                                                        <Switch
+                                                          checked={kpi.is_active}
+                                                          onCheckedChange={(checked) => {
+                                                            if (!checked) {
+                                                              setConfirmHideKpi({ id: kpi.id, name: kpi.name });
+                                                            } else {
+                                                              toggleKpiActiveMutation.mutate({
+                                                                id: kpi.id,
+                                                                is_active: kpi.is_active,
+                                                              });
+                                                            }
+                                                          }}
+                                                          disabled={!isAdmin}
+                                                        />
+                                                      </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <div className="flex items-center gap-1">
+                                                        {isAdmin && (
+                                                          <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-7 w-7"
+                                                            onClick={() => setKpiArea({ id: area.id, name: area.name })}
+                                                            title="Gestisci KPI area"
+                                                          >
+                                                            <Pencil className="h-3 w-3" />
+                                                          </Button>
+                                                        )}
+                                                      </div>
+                                                    </TableCell>
+                                                  </TableRow>
+                                                );
+                                              })}
+                                            </TableBody>
+                                          </Table>
+                                        )}
+                                      </CardContent>
+                                    </Card>
                                   );
                                 })}
                               </div>
