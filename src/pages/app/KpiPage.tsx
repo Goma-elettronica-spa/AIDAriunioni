@@ -427,13 +427,40 @@ function MiniKpiCard({
         </CardContent>
       </Card>
 
-      {expanded && kpi.description && (
+      {expanded && (
         <Card className="border border-border mt-2">
           <CardContent className="p-6">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-              Descrizione
-            </p>
-            <p className="text-sm text-foreground">{kpi.description}</p>
+            {kpi.description && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                  Descrizione
+                </p>
+                <p className="text-sm text-foreground">{kpi.description}</p>
+              </div>
+            )}
+            {kpi.sparkValues.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  Storico
+                </p>
+                <KpiHistoryChart
+                  entries={kpi.sparkValues.map((v, i) => ({
+                    id: `${kpi.id}-${i}`,
+                    kpi_id: kpi.id,
+                    current_value: v,
+                    previous_value: null,
+                    delta: null,
+                    delta_percent: null,
+                    is_improved: null,
+                    meeting_id: "",
+                    meeting_title: "",
+                    meeting_date: "",
+                  }))}
+                  unit={kpi.unit}
+                  targetValue={kpi.targetValue ?? null}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
