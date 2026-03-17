@@ -60,22 +60,70 @@ export function KpiSection({
     },
   });
 
-  // Fetch KPI definitions for user's areas
+  // Fetch KPIs assigned to this user via junction table
+  const assignedKpiIds = useQuery({
+    queryKey: ["kpi-assigned-users", userId, tenantId],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("kpi_definition_users")
+        .select("kpi_id")
+        .eq("user_id", userId);
+      if (error) throw error;
+      return (data ?? []).map((d: any) => d.kpi_id as string);
+    },
+  });
+
+  // Fetch KPI definitions: area-based + company-wide + directly assigned
   const definitions = useQuery({
-    queryKey: ["kpi-defs", userId, tenantId, userAreas.data?.map((a) => a.functional_area_id)],
-    enabled: !!userAreas.data,
+    queryKey: ["kpi-defs", userId, tenantId, userAreas.data?.map((a) => a.functional_area_id), assignedKpiIds.data],
+    enabled: !!userAreas.data && !!assignedKpiIds.data,
     queryFn: async () => {
       const areaIds = userAreas.data!.map((a) => a.functional_area_id);
-      if (!areaIds.length) return [];
-      const { data, error } = await supabase
+      const directIds = assignedKpiIds.data ?? [];
+
+      // Fetch area-based KPIs
+      let areaKpis: any[] = [];
+      if (areaIds.length > 0) {
+        const { data, error } = await supabase
+          .from("kpi_definitions")
+          .select("id, name, unit, direction, target_value, is_required, functional_area_id, is_company_wide")
+          .in("functional_area_id", areaIds)
+          .eq("tenant_id", tenantId)
+          .eq("is_active", true)
+          .order("name");
+        if (error) throw error;
+        areaKpis = data ?? [];
+      }
+
+      // Fetch company-wide KPIs
+      const { data: companyKpis, error: companyErr } = await supabase
         .from("kpi_definitions")
-        .select("id, name, unit, direction, target_value, is_required, functional_area_id")
-        .in("functional_area_id", areaIds)
+        .select("id, name, unit, direction, target_value, is_required, functional_area_id, is_company_wide")
         .eq("tenant_id", tenantId)
         .eq("is_active", true)
+        .eq("is_company_wide", true)
         .order("name");
-      if (error) throw error;
-      return data;
+      if (companyErr) throw companyErr;
+
+      // Fetch directly assigned KPIs
+      let directKpis: any[] = [];
+      if (directIds.length > 0) {
+        const { data, error } = await supabase
+          .from("kpi_definitions")
+          .select("id, name, unit, direction, target_value, is_required, functional_area_id, is_company_wide")
+          .in("id", directIds)
+          .eq("tenant_id", tenantId)
+          .eq("is_active", true)
+          .order("name");
+        if (error) throw error;
+        directKpis = data ?? [];
+      }
+
+      // Merge and deduplicate by id
+      const map = new Map<string, any>();
+      for (const k of [...areaKpis, ...(companyKpis ?? []), ...directKpis]) {
+        map.set(k.id, k);
+      }
+      return Array.from(map.values());
     },
   });
 
@@ -149,6 +197,10 @@ export function KpiSection({
     setKpis(
       definitions.data.map((d: any) => {
         const existing = entryMap.get(d.id);
+        const areaId = d.functional_area_id ?? (d.is_company_wide ? "__company__" : "__direct__");
+        const areaName = d.functional_area_id
+          ? (areaNameMap.get(d.functional_area_id) ?? "")
+          : (d.is_company_wide ? "Aziendale" : "Assegnato");
         return {
           kpiId: d.id,
           name: d.name,
@@ -160,8 +212,8 @@ export function KpiSection({
           previousValue: prevMap.get(d.id) ?? null,
           entryId: existing?.id ?? null,
           variances: existing ? (varianceMap.get(existing.id) ?? []) : [],
-          areaName: areaNameMap.get(d.functional_area_id) ?? "",
-          areaId: d.functional_area_id,
+          areaName,
+          areaId,
         };
       })
     );
