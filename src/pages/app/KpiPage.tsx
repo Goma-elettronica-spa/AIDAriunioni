@@ -336,6 +336,7 @@ function MiniKpiCard({
     latest: any;
     sparkValues: number[];
     areaName?: string;
+    targetValue?: number | null;
   };
   expanded: boolean;
   onToggle: () => void;
@@ -369,7 +370,12 @@ function MiniKpiCard({
                   {formatNumber(latest.current_value, kpi.unit)}
                 </p>
               ) : (
-                <p className="text-sm text-muted-foreground mt-1">Nessun dato</p>
+                <p className="text-sm text-muted-foreground mt-1">Nessun dato inserito</p>
+              )}
+              {kpi.targetValue != null && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Obiettivo: <span className="font-semibold text-foreground">{formatNumber(kpi.targetValue, kpi.unit)}</span>
+                </p>
               )}
             </div>
             {kpi.sparkValues.length > 1 && (
@@ -391,6 +397,21 @@ function MiniKpiCard({
                   </span>
                 )}
               </span>
+            </div>
+          )}
+          {/* Progress bar towards target */}
+          {kpi.targetValue != null && kpi.targetValue > 0 && latest && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                <span>Target: {formatNumber(kpi.targetValue, kpi.unit)}</span>
+                <span className="font-mono">{Math.min(100, Math.round((latest.current_value / kpi.targetValue) * 100))}%</span>
+              </div>
+              <div className="h-1 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-foreground rounded-full transition-all"
+                  style={{ width: `${Math.min(100, Math.round((latest.current_value / kpi.targetValue) * 100))}%` }}
+                />
+              </div>
             </div>
           )}
         </CardContent>
@@ -850,6 +871,7 @@ function AllUsersKpiSection({ tenantId }: { tenantId: string }) {
               name: d.name,
               description: d.description,
               unit: d.unit,
+              targetValue: (d as any).target_value ?? null,
               latest,
               sparkValues,
               areaName: areaMap.get(areaId) ?? "",
