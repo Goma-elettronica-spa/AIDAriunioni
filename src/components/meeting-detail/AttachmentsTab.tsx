@@ -30,7 +30,7 @@ export function AttachmentsTab({ meeting }: Props) {
 
   // Admin upload state
   const [selectedAreaId, setSelectedAreaId] = useState("");
-  const [selectedUserId, setSelectedUserId] = useState("");
+  const [resolvedUserId, setResolvedUserId] = useState("");
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
