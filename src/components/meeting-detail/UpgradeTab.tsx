@@ -189,11 +189,15 @@ export function UpgradeTab({ meetingId, tenantId, isAdmin, summaryText, transcri
     let transcriptText = "";
 
     if (transcriptUrl) {
-      const ext = transcriptUrl.toLowerCase();
-      if (ext.endsWith(".txt") || ext.endsWith(".md")) {
+      // Try fetching any text-based transcript URL (txt, md, or URLs without clear extension)
+      const ext = transcriptUrl.toLowerCase().split("?")[0]; // strip query params
+      const isTextBased = ext.endsWith(".txt") || ext.endsWith(".md");
+      if (isTextBased) {
         try {
           const r = await fetch(transcriptUrl);
-          transcriptText = await r.text();
+          if (r.ok) {
+            transcriptText = await r.text();
+          }
         } catch {
           // fall through to summary_text
         }
