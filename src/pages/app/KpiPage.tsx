@@ -903,6 +903,22 @@ function AllUsersKpiSection({ tenantId }: { tenantId: string }) {
               .reverse()
               .slice(-12)
               .map((e: any) => e.current_value);
+            const historyEntries: KpiEntryWithMeeting[] = kpiEntries
+              .slice()
+              .reverse()
+              .slice(-12)
+              .map((e: any) => ({
+                id: e.id,
+                kpi_id: e.kpi_id,
+                current_value: e.current_value,
+                previous_value: null,
+                delta: e.delta ?? null,
+                delta_percent: e.delta_percent ?? null,
+                is_improved: e.is_improved ?? null,
+                meeting_id: e.meeting_id,
+                meeting_title: "",
+                meeting_date: e.meetings?.scheduled_date ?? "",
+              }));
             kpis.push({
               id: `${d.id}-${u.id}`,
               name: d.name,
@@ -910,7 +926,8 @@ function AllUsersKpiSection({ tenantId }: { tenantId: string }) {
               unit: d.unit,
               targetValue: (d as any).target_value ?? null,
               latest,
-              sparkValues,
+              sparkValues: historyEntries.map((e) => e.current_value),
+              historyEntries,
               areaName: areaMap.get(areaId) ?? "",
             });
           }
