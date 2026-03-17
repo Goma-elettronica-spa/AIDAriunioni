@@ -508,7 +508,6 @@ export default function BoardRolesPage() {
                 <th className="text-left font-medium text-muted-foreground py-2 px-4 w-[18%]">Area Funzionale</th>
                 <th className="text-left font-medium text-muted-foreground py-2 px-4 w-[18%]">Ruolo</th>
                 <th className="text-left font-medium text-muted-foreground py-2 px-4 w-[22%]">Persona Assegnata</th>
-                <th className="text-left font-medium text-muted-foreground py-2 px-4 w-[18%]">Job Title</th>
                 <th className="text-right font-medium text-muted-foreground py-2 px-4 w-[24%]">Azioni</th>
               </tr>
             </thead>
@@ -574,14 +573,6 @@ export default function BoardRolesPage() {
                       )}
                     </td>
 
-                    {/* Job Title */}
-                    <td className="py-2 px-4 align-middle">
-                      {assignedUser?.job_title ? (
-                        <span className="text-muted-foreground">{assignedUser.job_title}</span>
-                      ) : (
-                        <span className="text-muted-foreground">&mdash;</span>
-                      )}
-                    </td>
 
                     {/* Azioni */}
                     <td className="py-2 px-4 align-middle">
