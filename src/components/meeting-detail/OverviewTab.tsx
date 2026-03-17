@@ -625,6 +625,22 @@ export function OverviewTab({ meeting, isAdmin }: Props) {
           </div>
         )}
       </div>
+      {/* Hidden file input for admin upload */}
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept=".pdf"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          const targetUserId = pendingUploadUserId.current;
+          if (file && targetUserId) {
+            handleAdminUpload(file, targetUserId);
+          }
+          pendingUploadUserId.current = null;
+          e.target.value = "";
+        }}
+      />
     </div>
   );
 }
