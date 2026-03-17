@@ -109,7 +109,7 @@ export default function KpiManagementSheet({
       if (areaId) {
         q = q.eq("functional_area_id", areaId);
       } else {
-        q = q.is("functional_area_id", null);
+        q = q.is("functional_area_id", null).is("user_id", null);
       }
       const { data, error } = await q;
       if (error) throw error;
