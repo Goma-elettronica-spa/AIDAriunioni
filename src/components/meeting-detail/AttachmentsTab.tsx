@@ -30,7 +30,7 @@ export function AttachmentsTab({ meeting }: Props) {
 
   // Admin upload state
   const [selectedAreaId, setSelectedAreaId] = useState("");
-  const [selectedUserId, setSelectedUserId] = useState("");
+  const [resolvedUserId, setResolvedUserId] = useState("");
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -124,27 +124,30 @@ export function AttachmentsTab({ meeting }: Props) {
     },
   });
 
-  // Users in selected area (for admin upload)
-  const usersInSelectedArea = useQuery({
-    queryKey: ["attachments-users-in-area", selectedAreaId, tenantId],
-    enabled: !!selectedAreaId && selectedAreaId !== "",
+  // Auto-resolve user for selected area (1:1 relationship)
+  const userInSelectedArea = useQuery({
+    queryKey: ["attachments-user-in-area", selectedAreaId, tenantId],
+    enabled: !!selectedAreaId,
     queryFn: async () => {
-      const { data: ufaRows, error } = await supabase
+      const { data, error } = await supabase
         .from("user_functional_areas")
         .select("user_id")
         .eq("functional_area_id", selectedAreaId)
-        .eq("tenant_id", tenantId);
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
       if (error) throw error;
-      const userIds = (ufaRows ?? []).map((r) => r.user_id);
-      return userIds;
+      return data?.user_id ?? null;
     },
   });
+
+  // Keep resolvedUserId in sync
+  const effectiveUserId = userInSelectedArea.data ?? "";
 
   // Admin upload handler
   const handleAdminUpload = useCallback(
     async (file: File) => {
-      if (!selectedUserId || !selectedAreaId) {
-        toast({ title: "Seleziona area e persona", variant: "destructive" });
+      if (!selectedAreaId || !effectiveUserId) {
+        toast({ title: "Seleziona un'area funzionale con un utente assegnato", variant: "destructive" });
         return;
       }
       if (file.type !== "application/pdf") {
@@ -157,7 +160,7 @@ export function AttachmentsTab({ meeting }: Props) {
       }
 
       setUploading(true);
-      const path = `${tenantId}/${meetingId}/${selectedAreaId}_${selectedUserId}.pdf`;
+      const path = `${tenantId}/${meetingId}/${selectedAreaId}_${effectiveUserId}.pdf`;
 
       const { error: uploadError } = await supabase.storage
         .from("slides")
@@ -176,7 +179,7 @@ export function AttachmentsTab({ meeting }: Props) {
         .from("slide_uploads")
         .select("id")
         .eq("meeting_id", meetingId)
-        .eq("user_id", selectedUserId)
+        .eq("user_id", effectiveUserId)
         .eq("functional_area_id", selectedAreaId)
         .eq("tenant_id", tenantId)
         .maybeSingle();
@@ -193,7 +196,7 @@ export function AttachmentsTab({ meeting }: Props) {
       } else {
         await supabase.from("slide_uploads").insert({
           meeting_id: meetingId,
-          user_id: selectedUserId,
+          user_id: effectiveUserId,
           tenant_id: tenantId,
           functional_area_id: selectedAreaId,
           file_name: file.name,
@@ -204,10 +207,10 @@ export function AttachmentsTab({ meeting }: Props) {
 
       queryClient.invalidateQueries({ queryKey: ["attachments-slides"] });
       setUploading(false);
-      setSelectedUserId("");
+      setSelectedAreaId("");
       toast({ title: "Allegato caricato con successo" });
     },
-    [meetingId, selectedUserId, selectedAreaId, tenantId, queryClient]
+    [meetingId, effectiveUserId, selectedAreaId, tenantId, queryClient]
   );
 
   const handleAdminDelete = async (slideId: string, fileUrl: string) => {
@@ -293,11 +296,10 @@ export function AttachmentsTab({ meeting }: Props) {
     });
   }
 
-  // Filter users for selected area in admin upload
-  const areaUserIds = usersInSelectedArea.data ?? [];
-  const filteredUsersForUpload = selectedAreaId
-    ? allUsers.filter((u) => areaUserIds.includes(u.id))
-    : [];
+  // Get user name for the resolved user
+  const resolvedUserName = effectiveUserId
+    ? allUsers.find((u) => u.id === effectiveUserId)?.full_name ?? ""
+    : "";
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -320,10 +322,7 @@ export function AttachmentsTab({ meeting }: Props) {
                 <label className="text-xs font-medium text-muted-foreground">Area Funzionale</label>
                 <Select
                   value={selectedAreaId}
-                  onValueChange={(val) => {
-                    setSelectedAreaId(val);
-                    setSelectedUserId("");
-                  }}
+                  onValueChange={setSelectedAreaId}
                 >
                   <SelectTrigger className="h-8 text-xs w-[200px]">
                     <SelectValue placeholder="Seleziona area..." />
@@ -338,33 +337,22 @@ export function AttachmentsTab({ meeting }: Props) {
                 </Select>
               </div>
 
-              <div className="space-y-1.5 min-w-[180px]">
-                <label className="text-xs font-medium text-muted-foreground">Persona</label>
-                <Select
-                  value={selectedUserId}
-                  onValueChange={setSelectedUserId}
-                  disabled={!selectedAreaId}
-                >
-                  <SelectTrigger className="h-8 text-xs w-[200px]">
-                    <SelectValue placeholder={selectedAreaId ? "Seleziona persona..." : "Prima seleziona l'area"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredUsersForUpload.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.full_name}
-                      </SelectItem>
-                    ))}
-                    {filteredUsersForUpload.length === 0 && selectedAreaId && (
-                      <div className="px-2 py-1.5 text-xs text-muted-foreground">Nessun utente in questa area</div>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
+              {selectedAreaId && (
+                <div className="flex items-center text-xs text-muted-foreground h-8">
+                  {userInSelectedArea.isLoading ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : resolvedUserName ? (
+                    <span>→ {resolvedUserName}</span>
+                  ) : (
+                    <span className="text-destructive">Nessun utente assegnato a questa area</span>
+                  )}
+                </div>
+              )}
 
               <Button
                 size="sm"
                 className="h-8"
-                disabled={!selectedUserId || !selectedAreaId || uploading}
+                disabled={!effectiveUserId || !selectedAreaId || uploading}
                 onClick={() => inputRef.current?.click()}
               >
                 {uploading ? (
