@@ -237,12 +237,11 @@ export function AttachmentsTab({ meeting }: Props) {
   const allAreas = areasQuery.data ?? [];
   const allUsers = allUsersQuery.data ?? [];
 
-  // Build (area_id, user_id) → slides map
-  const areaUserSlides = new Map<string, typeof slides>();
+  // Build user_id → slides map (group all files by user)
+  const userSlidesMap = new Map<string, typeof slides>();
   for (const s of slides) {
-    const key = `${s.functional_area_id ?? "none"}:${s.user_id}`;
-    if (!areaUserSlides.has(key)) areaUserSlides.set(key, []);
-    areaUserSlides.get(key)!.push(s);
+    if (!userSlidesMap.has(s.user_id)) userSlidesMap.set(s.user_id, []);
+    userSlidesMap.get(s.user_id)!.push(s);
   }
 
   // Build user → area map
