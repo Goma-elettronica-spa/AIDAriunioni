@@ -521,10 +521,10 @@ export default function BoardRolesPage() {
                     {/* Area */}
                     <td className="py-2 px-4 align-middle">
                       {row.showArea ? (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 group/area">
                           <span className="font-bold text-foreground text-[0.9rem]">{row.areaName}</span>
                           {area && (
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 opacity-0 group-hover/area:opacity-100 transition-opacity">
                               <button
                                 type="button"
                                 className="rounded p-0.5 hover:bg-muted"
