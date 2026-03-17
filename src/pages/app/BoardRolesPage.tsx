@@ -805,29 +805,44 @@ export default function BoardRolesPage() {
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Conferma eliminazione</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              {roleDeps.hasUser && <AlertTriangle className="h-5 w-5 text-destructive" />}
+              Eliminare il ruolo "{roleToDelete?.name}"?
+            </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground py-4">
-            Sei sicuro di voler eliminare il ruolo{" "}
-            <span className="font-semibold text-foreground">{roleToDelete?.name}</span>?
-            Questa azione non può essere annullata.
-          </p>
+          {roleDeps.hasUser ? (
+            <div className="py-4 space-y-2">
+              <p className="text-sm text-destructive font-medium">
+                Non è possibile eliminare questo ruolo.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Il ruolo è attualmente assegnato a <span className="font-semibold text-foreground">{roleDeps.userName}</span>.
+                Prima di eliminarlo, rimuovi l'assegnazione o riassegna la persona a un altro ruolo.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground py-4">
+              Questa azione è irreversibile. Il ruolo verrà eliminato definitivamente.
+            </p>
+          )}
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setDeleteConfirmOpen(false)}
               className="flex items-center justify-center gap-2"
             >
-              Annulla
+              {roleDeps.hasUser ? "Chiudi" : "Annulla"}
             </Button>
-            <Button
-              variant="destructive"
-              onClick={() => roleToDelete && deleteRoleMutation.mutate(roleToDelete.id)}
-              disabled={deleteRoleMutation.isPending}
-              className="flex items-center justify-center gap-2"
-            >
-              {deleteRoleMutation.isPending ? "Eliminazione..." : "Elimina"}
-            </Button>
+            {!roleDeps.hasUser && (
+              <Button
+                variant="destructive"
+                onClick={() => roleToDelete && deleteRoleMutation.mutate(roleToDelete.id)}
+                disabled={deleteRoleMutation.isPending}
+                className="flex items-center justify-center gap-2"
+              >
+                {deleteRoleMutation.isPending ? "Eliminazione..." : "Elimina"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -841,19 +856,32 @@ export default function BoardRolesPage() {
               Eliminare l'area "{areaToDelete?.name}"?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {areaKpiCount > 0
-                ? `Questa area ha ${areaKpiCount} KPI assegnate. Eliminando l'area, le KPI rimarranno senza area. Continuare?`
-                : "Questa azione è irreversibile. L'area funzionale verrà eliminata definitivamente."}
+              {areaDeps.kpis > 0 || areaDeps.roles > 0 ? (
+                <span className="space-y-1 block">
+                  <span className="text-destructive font-medium block">Non è possibile eliminare questa area.</span>
+                  <span className="block">
+                    {areaDeps.roles > 0 && <span>Ci sono <strong>{areaDeps.roles} ruoli</strong> collegati. </span>}
+                    {areaDeps.kpis > 0 && <span>Ci sono <strong>{areaDeps.kpis} KPI</strong> collegati. </span>}
+                    Prima sposta o elimina gli elementi collegati.
+                  </span>
+                </span>
+              ) : (
+                "Questa azione è irreversibile. L'area funzionale verrà eliminata definitivamente."
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annulla</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => areaToDelete && deleteAreaMutation.mutate(areaToDelete.id)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteAreaMutation.isPending ? "Eliminazione..." : "Elimina"}
-            </AlertDialogAction>
+            <AlertDialogCancel>
+              {areaDeps.kpis > 0 || areaDeps.roles > 0 ? "Chiudi" : "Annulla"}
+            </AlertDialogCancel>
+            {areaDeps.kpis === 0 && areaDeps.roles === 0 && (
+              <AlertDialogAction
+                onClick={() => areaToDelete && deleteAreaMutation.mutate(areaToDelete.id)}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deleteAreaMutation.isPending ? "Eliminazione..." : "Elimina"}
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
