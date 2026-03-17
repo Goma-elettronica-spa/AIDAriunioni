@@ -296,11 +296,10 @@ export function AttachmentsTab({ meeting }: Props) {
     });
   }
 
-  // Filter users for selected area in admin upload
-  const areaUserIds = usersInSelectedArea.data ?? [];
-  const filteredUsersForUpload = selectedAreaId
-    ? allUsers.filter((u) => areaUserIds.includes(u.id))
-    : [];
+  // Get user name for the resolved user
+  const resolvedUserName = effectiveUserId
+    ? allUsers.find((u) => u.id === effectiveUserId)?.full_name ?? ""
+    : "";
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
