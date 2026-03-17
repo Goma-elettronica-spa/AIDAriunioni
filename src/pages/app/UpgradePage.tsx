@@ -519,16 +519,20 @@ export default function UpgradePage() {
     let savings = 0;
     let hours = 0;
     let rejectedCount = 0;
+    // Only count values for cards that have transitioned past "proposed" (i.e. reached "todo" or beyond)
+    const countableStatuses = ["todo", "wip", "done", "stuck", "waiting_for"];
     for (const c of all) {
       if (c.status === "rejected") {
         rejectedCount++;
       }
-      if (c.reason_why === "revenue_generation") {
-        if (c.value_unit === "man_hours") hours += c.value_amount;
-        else revenue += c.value_amount;
-      } else {
-        if (c.value_unit === "man_hours") hours += c.value_amount;
-        else savings += c.value_amount;
+      if (countableStatuses.includes(c.status)) {
+        if (c.reason_why === "revenue_generation") {
+          if (c.value_unit === "man_hours") hours += c.value_amount;
+          else revenue += c.value_amount;
+        } else {
+          if (c.value_unit === "man_hours") hours += c.value_amount;
+          else savings += c.value_amount;
+        }
       }
     }
     return { total: all.length, revenue, savings, hours, rejectedCount };
