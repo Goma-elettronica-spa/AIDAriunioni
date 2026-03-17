@@ -19,6 +19,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 
 import { OverviewTab } from "@/components/meeting-detail/OverviewTab";
+import { AttachmentsTab } from "@/components/meeting-detail/AttachmentsTab";
 import { MaterialeTab } from "@/components/meeting-detail/MaterialeTab";
 import { PostMeetingTab } from "@/components/meeting-detail/PostMeetingTab";
 import { TasksTab } from "@/components/meeting-detail/TasksTab";
@@ -350,11 +351,11 @@ export default function MeetingDetailPage() {
             <TabsContent value="overview">
               <OverviewTab meeting={m} isAdmin={isAdmin} />
             </TabsContent>
-            <TabsContent value="attachments">
-              <MaterialeTab meeting={m} isAdmin={isAdmin} />
+          <TabsContent value="attachments">
+              <AttachmentsTab meeting={m} />
             </TabsContent>
             <TabsContent value="post_meeting">
-              <PostMeetingTab meeting={m} />
+              <MaterialeTab meeting={m} isAdmin={isAdmin} />
             </TabsContent>
             <TabsContent value="tasks">
               <TasksTab
