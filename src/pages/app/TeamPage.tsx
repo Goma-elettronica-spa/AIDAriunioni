@@ -916,33 +916,19 @@ export default function TeamPage() {
     },
   });
 
-  // User invite — create auth user (sends email) then insert into users table
+  // User invite — pre-create profile in users table (no auth email sent).
+  // When the user registers independently and logs in, the system reconciles by email.
   const inviteMutation = useMutation({
     mutationFn: async () => {
       const email = invEmail.trim().toLowerCase();
+      const placeholderId = crypto.randomUUID();
 
-      // 1. Create the auth user — Supabase sends a confirmation email automatically
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password: crypto.randomUUID(), // random password, user will use magic link
-        options: {
-          data: {
-            full_name: invName.trim(),
-            invited_to: tenantName,
-            invited_by_name: user?.full_name ?? "",
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-      if (signUpError) throw signUpError;
-      if (!signUpData.user) throw new Error("Impossibile creare l'utente di autenticazione");
-
-      // 2. Resolve board role details
+      // 1. Resolve board role details
       const selectedRole = (boardRoles.data ?? []).find((r) => r.id === invBoardRoleId);
 
-      // 2b. Insert into users table with the REAL auth user id
+      // 2. Insert into users table with a placeholder id (will be reconciled on first login)
       const { error } = await supabase.from("users").insert({
-        id: signUpData.user.id,
+        id: placeholderId,
         email,
         full_name: invName.trim(),
         job_title: selectedRole ? selectedRole.name : (invTitle.trim() || null),
@@ -962,7 +948,7 @@ export default function TeamPage() {
       }
       if (allAreaIds.size > 0) {
         const rows = Array.from(allAreaIds).map((areaId) => ({
-          user_id: signUpData.user!.id,
+          user_id: placeholderId,
           functional_area_id: areaId,
           tenant_id: tenantId!,
         }));
