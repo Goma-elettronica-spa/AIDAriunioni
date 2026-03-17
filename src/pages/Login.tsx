@@ -295,7 +295,9 @@ export default function Login() {
 
     // Detect repeated signup (user already exists) — identities is empty array
     if (signUpData.user && (!signUpData.user.identities || signUpData.user.identities.length === 0)) {
-      setError("Un account con questa email esiste già. Effettua il login oppure controlla la tua casella email per il link di conferma.");
+      setResendEmail(regEmail.trim().toLowerCase());
+      setShowResendConfirmation(true);
+      setError("Un account con questa email esiste già. Effettua il login oppure reinvia l'email di conferma.");
       return;
     }
 
