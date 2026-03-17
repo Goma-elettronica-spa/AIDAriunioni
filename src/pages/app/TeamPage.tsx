@@ -686,6 +686,7 @@ export default function TeamPage() {
         .select("*")
         .eq("tenant_id", tenantId!)
         .is("functional_area_id", null)
+        .is("user_id", null)
         .eq("is_active", true)
         .order("created_at", { ascending: true });
       if (error) throw error;
