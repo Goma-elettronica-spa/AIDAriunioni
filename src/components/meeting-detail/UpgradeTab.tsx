@@ -223,40 +223,18 @@ export function UpgradeTab({ meetingId, tenantId, isAdmin, summaryText, transcri
 
     setGeneratingUpgrades(true);
     try {
-      const prompt = `Analizza questo riassunto/trascrizione di una riunione dirigenziale e suggerisci 3-7 proposte di miglioramento (upgrade) per l'azienda.
-
-Per ogni proposta indica:
-- title: titolo breve e specifico della miglioria
-- description: descrizione di cosa fare (2-3 frasi)
-- suggested_role: il ruolo aziendale piu adatto a gestire questa miglioria (es. "Direttore Commerciale", "CFO")
-- reason_why: "revenue_generation" se genera ricavi, "cost_cutting" se taglia costi
-- value_unit: "money" per soldi, "license_cost" per costi licenza, "man_hours" per ore uomo
-- value_amount: stima numerica del valore aggiunto
-- linked_kpi_name: nome della KPI collegata (se identificabile)
-
-Le KPI disponibili sono:
-${kpis.map(k => `- ${k.area_name}: ${k.name} (${k.unit})`).join("\n")}
-
-I ruoli disponibili sono:
-${users.map(u => `- ${u.full_name}: ${u.job_title}`).join("\n")}
-
-Rispondi SOLO con un array JSON valido, senza altro testo.
-
-CONTENUTO:
-${transcriptText}`;
-
-      const { data: fnData, error: fnError } = await supabase.functions.invoke("suggest-tasks", {
+      const { data: fnData, error: fnError } = await supabase.functions.invoke("suggest-upgrades", {
         body: {
-          transcriptText: prompt,
+          transcriptText: transcriptText.slice(0, 30000),
           users: users.map((u) => ({ full_name: u.full_name, job_title: u.job_title })),
-          mode: "upgrades",
+          kpis: kpis.map((k) => ({ name: k.name, unit: k.unit, area_name: k.area_name })),
         },
       });
 
       if (fnError) throw new Error(fnError.message || "Errore chiamata AI");
       if (fnData?.error) throw new Error(fnData.error);
 
-      const rawUpgrades = (fnData.tasks ?? fnData.upgrades ?? []) as Array<{
+      const rawUpgrades = (fnData.upgrades ?? []) as Array<{
         title: string;
         description: string;
         suggested_role: string;
@@ -273,7 +251,6 @@ ${transcriptText}`;
       }
 
       const inserts = rawUpgrades.map((u) => {
-        // Match owner by role
         let ownerId = user!.id;
         if (u.suggested_role) {
           const match = users.find(
@@ -284,7 +261,6 @@ ${transcriptText}`;
           if (match) ownerId = match.id;
         }
 
-        // Match KPI by name
         let linkedKpiId: string | null = null;
         if (u.linked_kpi_name) {
           const kpiMatch = kpis.find(
