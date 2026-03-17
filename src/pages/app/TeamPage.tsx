@@ -1902,24 +1902,18 @@ export default function TeamPage() {
             </div>
             {areas.length > 0 && (
               <div className="space-y-2">
-                <Label>Aree Funzionali</Label>
-                <div className="grid gap-2 max-h-32 overflow-y-auto border border-border rounded-md p-3">
-                  {areas.map((area) => (
-                    <div key={area.id} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`inv-area-${area.id}`}
-                        checked={invAreaIds.includes(area.id)}
-                        onCheckedChange={(checked) => handleInvAreaToggle(area.id, checked === true)}
-                      />
-                      <Label
-                        htmlFor={`inv-area-${area.id}`}
-                        className="text-sm font-normal cursor-pointer"
-                      >
-                        {area.name}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
+                <Label>Area Funzionale</Label>
+                <Select value={invAreaId || "__none__"} onValueChange={(v) => setInvAreaId(v === "__none__" ? "" : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona area..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Nessuna area</SelectItem>
+                    {areas.map((area) => (
+                      <SelectItem key={area.id} value={area.id}>{area.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
             <p className="text-xs text-muted-foreground">
