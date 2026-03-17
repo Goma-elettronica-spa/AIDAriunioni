@@ -409,7 +409,7 @@ export default function DashboardPage() {
             <span className="text-sm text-muted-foreground">{tenantName}</span>
           )}
           <Badge variant="secondary" className="text-xs font-normal">
-            {user?.role}
+            {roleLabels[user?.role ?? ""] ?? user?.role}
           </Badge>
         </div>
       </div>
