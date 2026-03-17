@@ -135,6 +135,7 @@ export default function KpiManagementSheet({
       queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId ?? "__company__", tenantId] });
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-company", tenantId] });
       writeAuditLog({
         tenantId,
         userId: authUser!.id,
