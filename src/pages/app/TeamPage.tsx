@@ -987,27 +987,8 @@ export default function TeamPage() {
     },
   });
 
-  // Resend invite
-  const resendInviteMutation = useMutation({
-    mutationFn: async (email: string) => {
-      const { error } = await supabase.auth.resend({
-        type: "signup",
-        email,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-      });
-      if (error) throw error;
-      return email;
-    },
-    onSuccess: (email) => {
-      toast({
-        title: "Invito reinviato",
-        description: `Un nuovo invito e' stato inviato a ${email}.`,
-      });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Errore", description: err.message, variant: "destructive" });
-    },
-  });
+  // Resend invite — no longer sends email, just shows a toast reminder
+  // Users register independently; the system reconciles by email on login
 
   // User edit
   const editMutation = useMutation({
