@@ -210,9 +210,15 @@ export function AttachmentsTab({ meeting }: Props) {
     [meetingId, selectedUserId, selectedAreaId, tenantId, queryClient]
   );
 
-  const handleAdminDelete = async (slideId: string, slideUserId: string) => {
-    const path = `${tenantId}/${meetingId}/${slideUserId}.pdf`;
-    await supabase.storage.from("slides").remove([path]);
+  const handleAdminDelete = async (slideId: string, fileUrl: string) => {
+    // Extract storage path from the public URL to delete the file
+    try {
+      const urlObj = new URL(fileUrl);
+      const pathMatch = urlObj.pathname.match(/\/storage\/v1\/object\/public\/slides\/(.+)/);
+      if (pathMatch) {
+        await supabase.storage.from("slides").remove([decodeURIComponent(pathMatch[1])]);
+      }
+    } catch { /* ignore URL parse errors */ }
     await supabase.from("slide_uploads").delete().eq("id", slideId);
     queryClient.invalidateQueries({ queryKey: ["attachments-slides"] });
     toast({ title: "Allegato eliminato" });
