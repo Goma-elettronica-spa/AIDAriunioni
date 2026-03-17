@@ -363,30 +363,6 @@ export default function MeetingsPage() {
                       )}
                     </div>
 
-                    {/* Actions — hide for past meetings */}
-                    {displayStatus !== "completed" && (
-                      <div
-                        className="flex items-center gap-2 shrink-0"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {isAdmin && nextStatus && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              statusMutation.mutate({
-                                id: m.id,
-                                newStatus: nextStatus,
-                              })
-                            }
-                            disabled={statusMutation.isPending}
-                          >
-                            {statusConfig[nextStatus]?.label ?? nextStatus}
-                            <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                          </Button>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </CardContent>
               </Card>
