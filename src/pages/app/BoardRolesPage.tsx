@@ -164,16 +164,21 @@ export default function BoardRolesPage() {
 
   // Build ordered rows: grouped by area, then "Senza Area" at end
   const tableRows = useMemo(() => {
-    const rows: { role: BoardRole; areaName: string; showArea: boolean }[] = [];
+    const rows: { role: BoardRole | null; areaName: string; areaId: string | null; showArea: boolean }[] = [];
     for (const area of areas) {
       const areaRoles = rolesByArea.get(area.id) ?? [];
-      areaRoles.forEach((role, idx) => {
-        rows.push({ role, areaName: area.name, showArea: idx === 0 });
-      });
+      if (areaRoles.length === 0) {
+        // Show area row even without roles
+        rows.push({ role: null, areaName: area.name, areaId: area.id, showArea: true });
+      } else {
+        areaRoles.forEach((role, idx) => {
+          rows.push({ role, areaName: area.name, areaId: area.id, showArea: idx === 0 });
+        });
+      }
     }
     const noAreaRoles = rolesByArea.get(null) ?? [];
     noAreaRoles.forEach((role, idx) => {
-      rows.push({ role, areaName: "Senza Area", showArea: idx === 0 });
+      rows.push({ role, areaName: "Senza Area", areaId: null, showArea: idx === 0 });
     });
     return rows;
   }, [areas, rolesByArea]);
