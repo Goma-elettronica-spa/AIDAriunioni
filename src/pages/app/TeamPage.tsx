@@ -1565,10 +1565,12 @@ export default function TeamPage() {
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <InlineJobTitle
                           value={u.job_title}
+                          boardRoleId={u.board_role_id}
                           userId={u.id}
                           tenantId={tenantId!}
                           currentUserId={user!.id}
                           canEdit={isOrgAdmin}
+                          boardRoles={boardRoles.data ?? []}
                         />
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
