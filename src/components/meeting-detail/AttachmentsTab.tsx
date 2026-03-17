@@ -146,8 +146,8 @@ export function AttachmentsTab({ meeting }: Props) {
   // Admin upload handler
   const handleAdminUpload = useCallback(
     async (file: File) => {
-      if (!selectedUserId || !selectedAreaId) {
-        toast({ title: "Seleziona area e persona", variant: "destructive" });
+      if (!selectedAreaId || !effectiveUserId) {
+        toast({ title: "Seleziona un'area funzionale con un utente assegnato", variant: "destructive" });
         return;
       }
       if (file.type !== "application/pdf") {
@@ -160,7 +160,7 @@ export function AttachmentsTab({ meeting }: Props) {
       }
 
       setUploading(true);
-      const path = `${tenantId}/${meetingId}/${selectedAreaId}_${selectedUserId}.pdf`;
+      const path = `${tenantId}/${meetingId}/${selectedAreaId}_${effectiveUserId}.pdf`;
 
       const { error: uploadError } = await supabase.storage
         .from("slides")
@@ -179,7 +179,7 @@ export function AttachmentsTab({ meeting }: Props) {
         .from("slide_uploads")
         .select("id")
         .eq("meeting_id", meetingId)
-        .eq("user_id", selectedUserId)
+        .eq("user_id", effectiveUserId)
         .eq("functional_area_id", selectedAreaId)
         .eq("tenant_id", tenantId)
         .maybeSingle();
@@ -196,7 +196,7 @@ export function AttachmentsTab({ meeting }: Props) {
       } else {
         await supabase.from("slide_uploads").insert({
           meeting_id: meetingId,
-          user_id: selectedUserId,
+          user_id: effectiveUserId,
           tenant_id: tenantId,
           functional_area_id: selectedAreaId,
           file_name: file.name,
@@ -207,10 +207,10 @@ export function AttachmentsTab({ meeting }: Props) {
 
       queryClient.invalidateQueries({ queryKey: ["attachments-slides"] });
       setUploading(false);
-      setSelectedUserId("");
+      setSelectedAreaId("");
       toast({ title: "Allegato caricato con successo" });
     },
-    [meetingId, selectedUserId, selectedAreaId, tenantId, queryClient]
+    [meetingId, effectiveUserId, selectedAreaId, tenantId, queryClient]
   );
 
   const handleAdminDelete = async (slideId: string, fileUrl: string) => {
