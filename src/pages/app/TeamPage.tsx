@@ -2130,7 +2130,7 @@ export default function TeamPage() {
               onClick={() => setKpiArea({ id: null, name: "Aziendali" })}
             >
               <Plus className="h-4 w-4 mr-1" />
-              Aggiungi KPI
+              Aggiungi KPI Aziendale
             </Button>
           </div>
           {companyKpis.isLoading ? (
