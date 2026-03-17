@@ -224,28 +224,18 @@ function KpiCard({
               </div>
             )}
 
-            {sparkValues.length > 1 && (
+            {entries.length > 0 && (
               <div className="mb-4">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                   Storico
                 </p>
-                <div className="text-muted-foreground">
-                  <Sparkline values={sparkValues} width={320} height={64} />
-                </div>
+                <KpiHistoryChart
+                  entries={entries}
+                  unit={kpi.unit}
+                  targetValue={kpi.target_value}
+                />
               </div>
             )}
-
-            {last6.length > 0 && (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Data</TableHead>
-                      <TableHead className="text-right">Valore</TableHead>
-                      <TableHead className="text-right">Delta</TableHead>
-                      <TableHead>Stato</TableHead>
-                    </TableRow>
-                  </TableHeader>
                   <TableBody>
                     {last6.map((entry) => {
                       const explanations = varianceMap.get(entry.id) ?? [];
