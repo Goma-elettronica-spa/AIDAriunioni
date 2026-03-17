@@ -853,7 +853,7 @@ export default function DashboardPage() {
             variant="ghost"
             size="sm"
             className="text-muted-foreground"
-            onClick={() => navigate("/kpi")}
+            onClick={() => navigate("/board")}
           >
             Vedi tutti
             <ArrowRight className="h-3.5 w-3.5 ml-1" />
