@@ -451,7 +451,7 @@ export function AttachmentsTab({ meeting }: Props) {
                                     variant="ghost"
                                     size="icon"
                                     className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
-                                    onClick={() => handleAdminDelete(f.id, f.user_id)}
+                                    onClick={() => handleAdminDelete(f.id, f.file_url)}
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
