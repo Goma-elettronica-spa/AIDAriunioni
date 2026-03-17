@@ -571,7 +571,7 @@ export function UpgradeTab({ meetingId, tenantId, isAdmin, summaryText, transcri
                           <SelectValue placeholder="Seleziona KPI (opzionale)" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Nessuna</SelectItem>
+                          <SelectItem value="none">Nessuna</SelectItem>
                           {(kpiDefs.data ?? []).map((k) => (
                             <SelectItem key={k.id} value={k.id}>
                               {k.area_name ? `${k.area_name}: ` : ""}{k.name} ({k.unit})
