@@ -126,7 +126,7 @@ export default function KpiManagementSheet({
         direction: form.direction,
         target_value: form.target_value.trim() ? Number(form.target_value) : null,
         is_required: form.is_required,
-        functional_area_id: areaId,
+        functional_area_id: areaId ?? undefined,
         tenant_id: tenantId,
       });
       if (error) throw error;
