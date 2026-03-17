@@ -163,13 +163,12 @@ export default function MeetingsPage() {
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!scheduledDate) throw new Error("Data obbligatoria");
-      const quarter = getQuarter(scheduledDate);
       const dl = deadline ?? new Date(scheduledDate.getTime() - 3 * 24 * 60 * 60 * 1000);
       const { error } = await supabase.from("meetings").insert({
         title: title.trim(),
         scheduled_date: format(scheduledDate, "yyyy-MM-dd"),
         pre_meeting_deadline: dl.toISOString(),
-        quarter,
+        quarter: selectedQuarter,
         status: "draft",
         tenant_id: tenantId!,
       });
