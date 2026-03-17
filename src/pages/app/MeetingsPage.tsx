@@ -80,6 +80,8 @@ export default function MeetingsPage() {
   const [title, setTitle] = useState("");
   const [scheduledDate, setScheduledDate] = useState<Date | undefined>();
   const [deadline, setDeadline] = useState<Date | undefined>();
+  const currentYear = new Date().getFullYear();
+  const [selectedQuarter, setSelectedQuarter] = useState(`Q1-${currentYear}`);
 
   // Meetings
   const meetings = useQuery({
@@ -148,24 +150,25 @@ export default function MeetingsPage() {
 
   // Create
   const openCreate = () => {
-    const now = new Date();
-    const monthName = format(now, "MMMM yyyy", { locale: it });
+    const d = new Date();
+    const monthName = format(d, "MMMM yyyy", { locale: it });
     setTitle(`Riunione Prima Linea - ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}`);
     setScheduledDate(undefined);
     setDeadline(undefined);
+    const q = Math.ceil((d.getMonth() + 1) / 3);
+    setSelectedQuarter(`Q${q}-${d.getFullYear()}`);
     setCreateOpen(true);
   };
 
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!scheduledDate) throw new Error("Data obbligatoria");
-      const quarter = getQuarter(scheduledDate);
       const dl = deadline ?? new Date(scheduledDate.getTime() - 3 * 24 * 60 * 60 * 1000);
       const { error } = await supabase.from("meetings").insert({
         title: title.trim(),
         scheduled_date: format(scheduledDate, "yyyy-MM-dd"),
         pre_meeting_deadline: dl.toISOString(),
-        quarter,
+        quarter: selectedQuarter,
         status: "draft",
         tenant_id: tenantId!,
       });
@@ -421,11 +424,24 @@ export default function MeetingsPage() {
                   />
                 </PopoverContent>
               </Popover>
-              {scheduledDate && (
-                <p className="text-xs text-muted-foreground">
-                  Trimestre: {getQuarter(scheduledDate)}
-                </p>
-              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Trimestre</Label>
+              <Select value={selectedQuarter} onValueChange={setSelectedQuarter}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[currentYear - 1, currentYear, currentYear + 1].flatMap((y) =>
+                    [1, 2, 3, 4].map((q) => (
+                      <SelectItem key={`Q${q}-${y}`} value={`Q${q}-${y}`}>
+                        Q{q}-{y}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
