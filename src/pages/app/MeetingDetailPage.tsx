@@ -29,10 +29,11 @@ import { KpiTab } from "@/components/meeting-detail/KpiTab";
 const statusConfig: Record<string, { label: string; dotClass: string }> = {
   draft: { label: "Bozza", dotClass: "bg-[hsl(var(--status-todo))]" },
   pre_meeting: { label: "Prevista", dotClass: "bg-[hsl(var(--status-waiting))]" },
+  open: { label: "Aperta", dotClass: "bg-[hsl(var(--status-done))]" },
   in_progress: { label: "In Corso", dotClass: "bg-[hsl(var(--status-wip))]" },
   completed: { label: "Conclusa", dotClass: "bg-gray-700" },
 };
-const statusFlow = ["draft", "pre_meeting", "in_progress", "completed"];
+const statusFlow = ["draft", "pre_meeting", "open", "in_progress", "completed"];
 
 interface GateStatus {
   hasSlideUpload: boolean;
