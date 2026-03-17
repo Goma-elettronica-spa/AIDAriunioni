@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Check, X, FileText, Loader2, Send, RefreshCw, Eye, Download, Upload } from "lucide-react";
+import { Check, X, FileText, Loader2, Send, RefreshCw, Eye } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
 import type { Json } from "@/integrations/supabase/types";
@@ -26,66 +26,6 @@ export function OverviewTab({ meeting, isAdmin }: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [uploadingForUser, setUploadingForUser] = useState<string | null>(null);
-  const uploadInputRef = useRef<HTMLInputElement>(null);
-  const pendingUploadUserId = useRef<string | null>(null);
-
-  const handleAdminUpload = useCallback(
-    async (file: File, targetUserId: string) => {
-      if (file.type !== "application/pdf") {
-        toast({ title: "Solo file PDF", variant: "destructive" });
-        return;
-      }
-      if (file.size > 50 * 1024 * 1024) {
-        toast({ title: "File troppo grande (max 50MB)", variant: "destructive" });
-        return;
-      }
-      setUploadingForUser(targetUserId);
-      const path = `${tenantId}/${meetingId}/${targetUserId}.pdf`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("slides")
-        .upload(path, file, { upsert: true });
-
-      if (uploadError) {
-        toast({ title: "Errore upload", description: uploadError.message, variant: "destructive" });
-        setUploadingForUser(null);
-        return;
-      }
-
-      const { data: urlData } = supabase.storage.from("slides").getPublicUrl(path);
-
-      const { data: existingSlide } = await supabase
-        .from("slide_uploads")
-        .select("id")
-        .eq("meeting_id", meetingId)
-        .eq("user_id", targetUserId)
-        .eq("tenant_id", tenantId)
-        .maybeSingle();
-
-      if (existingSlide?.id) {
-        await supabase
-          .from("slide_uploads")
-          .update({ file_name: file.name, file_size: file.size, file_url: urlData.publicUrl })
-          .eq("id", existingSlide.id);
-      } else {
-        await supabase.from("slide_uploads").insert({
-          meeting_id: meetingId,
-          user_id: targetUserId,
-          tenant_id: tenantId,
-          file_name: file.name,
-          file_size: file.size,
-          file_url: urlData.publicUrl,
-        });
-      }
-
-      queryClient.invalidateQueries({ queryKey: ["overview-slides"] });
-      queryClient.invalidateQueries({ queryKey: ["attachments-slides"] });
-      setUploadingForUser(null);
-      toast({ title: "Allegato caricato" });
-    },
-    [meetingId, tenantId, queryClient]
-  );
 
   // Fetch dirigenti
   const dirigenti = useQuery({
@@ -137,50 +77,6 @@ export function OverviewTab({ meeting, isAdmin }: Props) {
         slides: new Set(slides.data?.map((s) => s.user_id) ?? []),
         tasksByUser,
       };
-    },
-  });
-
-  // Fetch slide uploads with user info for "Allegati per Area"
-  const slideUploads = useQuery({
-    queryKey: ["overview-slide-uploads", meetingId, tenantId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("slide_uploads")
-        .select("id, user_id, file_name, file_url")
-        .eq("meeting_id", meetingId)
-        .eq("tenant_id", tenantId);
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-
-  // Fetch user functional areas
-  const userFunctionalAreas = useQuery({
-    queryKey: ["overview-user-functional-areas", tenantId],
-    enabled: !!dirigenti.data,
-    queryFn: async () => {
-      const userIds = dirigenti.data!.map((d) => d.id);
-      if (!userIds.length) return { userAreas: [] as { user_id: string; functional_area_id: string }[], areas: [] as { id: string; name: string }[] };
-
-      const { data: ufa, error: ufaError } = await supabase
-        .from("user_functional_areas")
-        .select("user_id, functional_area_id")
-        .in("user_id", userIds);
-      if (ufaError) throw ufaError;
-
-      const areaIds = [...new Set((ufa ?? []).map((r) => r.functional_area_id))];
-      let areas: { id: string; name: string }[] = [];
-      if (areaIds.length) {
-        const { data: aData, error: aError } = await supabase
-          .from("functional_areas")
-          .select("id, name")
-          .in("id", areaIds)
-          .order("name");
-        if (aError) throw aError;
-        areas = aData ?? [];
-      }
-
-      return { userAreas: ufa ?? [], areas };
     },
   });
 
@@ -386,74 +282,6 @@ export function OverviewTab({ meeting, isAdmin }: Props) {
     );
   };
 
-  // Build "Allegati per Area" data
-  const buildAllegatiPerArea = () => {
-    const dirs = dirigenti.data ?? [];
-    const slides = slideUploads.data ?? [];
-    const ufaData = userFunctionalAreas.data;
-    if (!ufaData) return [];
-
-    const { userAreas, areas } = ufaData;
-
-    // Map: areaId -> area name
-    const areaNameMap = new Map<string, string>();
-    for (const a of areas) areaNameMap.set(a.id, a.name);
-
-    // Map: userId -> list of area ids
-    const userAreaMap = new Map<string, string[]>();
-    for (const ua of userAreas) {
-      if (!userAreaMap.has(ua.user_id)) userAreaMap.set(ua.user_id, []);
-      userAreaMap.get(ua.user_id)!.push(ua.functional_area_id);
-    }
-
-    // Map: userId -> user info
-    const userMap = new Map<string, { full_name: string; job_title: string | null }>();
-    for (const d of dirs) userMap.set(d.id, { full_name: d.full_name, job_title: d.job_title });
-
-    // Map: userId -> slides
-    const userSlides = new Map<string, { file_name: string; file_url: string }[]>();
-    for (const s of slides) {
-      if (!userSlides.has(s.user_id)) userSlides.set(s.user_id, []);
-      userSlides.get(s.user_id)!.push({ file_name: s.file_name, file_url: s.file_url });
-    }
-
-    // Group by area
-    const result: { areaName: string; users: { userId: string; fullName: string; files: { file_name: string; file_url: string }[] }[] }[] = [];
-
-    for (const area of areas) {
-      // Find users in this area
-      const usersInArea = dirs.filter((d) => {
-        const areaIds = userAreaMap.get(d.id) ?? [];
-        return areaIds.includes(area.id);
-      });
-
-      const areaUsers = usersInArea.map((u) => ({
-        userId: u.id,
-        fullName: u.full_name,
-        files: userSlides.get(u.id) ?? [],
-      }));
-
-      result.push({ areaName: area.name, users: areaUsers });
-    }
-
-    // Also include users with no area (if any)
-    const usersWithArea = new Set(userAreas.map((ua) => ua.user_id));
-    const usersWithoutArea = dirs.filter((d) => !usersWithArea.has(d.id));
-    if (usersWithoutArea.length > 0) {
-      result.push({
-        areaName: "Senza Area",
-        users: usersWithoutArea.map((u) => ({
-          userId: u.id,
-          fullName: u.full_name,
-          files: userSlides.get(u.id) ?? [],
-        })),
-      });
-    }
-
-    return result;
-  };
-
-  const allegatiPerArea = buildAllegatiPerArea();
 
   return (
     <div className="space-y-6">
@@ -553,94 +381,6 @@ export function OverviewTab({ meeting, isAdmin }: Props) {
           </div>
         )}
       </div>
-
-      {/* Allegati per Area */}
-      <div>
-        <h2 className="text-lg font-semibold text-foreground mb-4">
-          Allegati per Area
-        </h2>
-
-        {slideUploads.isLoading || userFunctionalAreas.isLoading || dirigenti.isLoading ? (
-          <Skeleton className="h-40 w-full" />
-        ) : allegatiPerArea.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nessuna area funzionale configurata.</p>
-        ) : (
-          <div className="space-y-4">
-            {allegatiPerArea.map((area) => (
-              <Card key={area.areaName} className="border border-border">
-                <CardContent className="p-6">
-                  <h3 className="text-sm font-semibold text-foreground mb-3">{area.areaName}</h3>
-                  <div className="space-y-2">
-                    {area.users.map((u) => (
-                      <div key={u.userId} className="flex items-center gap-2 text-sm">
-                        <span className="font-medium text-foreground">{u.fullName}:</span>
-                        {u.files.length > 0 ? (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {u.files.map((f, idx) => (
-                              <a
-                                key={idx}
-                                href={f.file_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-                              >
-                                <Download className="h-3 w-3" />
-                                {f.file_name}
-                              </a>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <span className="text-muted-foreground text-sm">(nessun allegato)</span>
-                            {isAdmin && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-6 text-xs px-2"
-                                disabled={uploadingForUser === u.userId}
-                                onClick={() => {
-                                  pendingUploadUserId.current = u.userId;
-                                  uploadInputRef.current?.click();
-                                }}
-                              >
-                                {uploadingForUser === u.userId ? (
-                                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                ) : (
-                                  <Upload className="h-3 w-3 mr-1" />
-                                )}
-                                Carica
-                              </Button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    {area.users.length === 0 && (
-                      <p className="text-sm text-muted-foreground">(nessun dirigente in questa area)</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
-      {/* Hidden file input for admin upload */}
-      <input
-        ref={uploadInputRef}
-        type="file"
-        accept=".pdf"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          const targetUserId = pendingUploadUserId.current;
-          if (file && targetUserId) {
-            handleAdminUpload(file, targetUserId);
-          }
-          pendingUploadUserId.current = null;
-          e.target.value = "";
-        }}
-      />
     </div>
   );
 }
