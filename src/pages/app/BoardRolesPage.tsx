@@ -634,6 +634,17 @@ export default function BoardRolesPage() {
                             <X className="h-3.5 w-3.5" />
                           </Button>
                         )}
+
+                        {/* Delete role */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => handleDeleteRole(row.role)}
+                          title="Elimina ruolo"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
+                        </Button>
                       </div>
                     </td>
                   </tr>
