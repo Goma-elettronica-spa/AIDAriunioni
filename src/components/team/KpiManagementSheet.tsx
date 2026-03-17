@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -30,7 +31,8 @@ import {
   Pencil,
   EyeOff,
   Plus,
-  X,
+  Building2,
+  Users,
 } from "lucide-react";
 
 interface KpiManagementSheetProps {
@@ -50,6 +52,7 @@ type KpiRow = {
   target_value: number | null;
   is_active: boolean;
   is_required: boolean;
+  is_company_wide: boolean;
   functional_area_id: string;
   tenant_id: string;
   created_at: string;
@@ -63,6 +66,8 @@ type KpiFormData = {
   direction: string;
   target_value: string;
   is_required: boolean;
+  is_company_wide: boolean;
+  assignedUserIds: string[];
 };
 
 const emptyForm: KpiFormData = {
@@ -72,6 +77,8 @@ const emptyForm: KpiFormData = {
   direction: "up_is_good",
   target_value: "",
   is_required: true,
+  is_company_wide: false,
+  assignedUserIds: [],
 };
 
 function formatTarget(value: number | null, unit: string): string {
@@ -96,6 +103,22 @@ export default function KpiManagementSheet({
   const [editForm, setEditForm] = useState<KpiFormData>(emptyForm);
   const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
 
+  // Fetch tenant users for assignment
+  const tenantUsers = useQuery({
+    queryKey: ["tenant-users-for-kpi", tenantId],
+    enabled: !!tenantId && open,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, full_name, email, role")
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .order("full_name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const kpis = useQuery({
     queryKey: ["kpi-definitions", areaId ?? "__company__", tenantId],
     enabled: !!tenantId && open,
@@ -117,32 +140,77 @@ export default function KpiManagementSheet({
     },
   });
 
+  // Fetch user assignments for all KPIs
+  const kpiUserAssignments = useQuery({
+    queryKey: ["kpi-definition-users", areaId ?? "__company__", tenantId],
+    enabled: !!kpis.data && kpis.data.length > 0,
+    queryFn: async () => {
+      const kpiIds = kpis.data!.map((k) => k.id);
+      const { data, error } = await (supabase.from as any)("kpi_definition_users")
+        .select("kpi_id, user_id")
+        .in("kpi_id", kpiIds);
+      if (error) throw error;
+      return data as { kpi_id: string; user_id: string }[];
+    },
+  });
+
+  // Build a map: kpiId → userId[]
+  const kpiUsersMap = new Map<string, string[]>();
+  for (const a of kpiUserAssignments.data ?? []) {
+    if (!kpiUsersMap.has(a.kpi_id)) kpiUsersMap.set(a.kpi_id, []);
+    kpiUsersMap.get(a.kpi_id)!.push(a.user_id);
+  }
+
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId ?? "__company__", tenantId] });
+    queryClient.invalidateQueries({ queryKey: ["kpi-definition-users", areaId ?? "__company__", tenantId] });
+    queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
+    queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
+    queryClient.invalidateQueries({ queryKey: ["kpi-company", tenantId] });
+    queryClient.invalidateQueries({ queryKey: ["kpi-defs"] });
+    queryClient.invalidateQueries({ queryKey: ["kpi-assigned-users"] });
+  };
+
   const createMutation = useMutation({
     mutationFn: async (form: KpiFormData) => {
-      const { error } = await supabase.from("kpi_definitions").insert({
+      // If no users selected and not explicitly company-wide, make it company-wide
+      const isCompanyWide = form.assignedUserIds.length === 0 ? true : form.is_company_wide;
+
+      const { data, error } = await supabase.from("kpi_definitions").insert({
         name: form.name.trim(),
         description: form.description.trim() || null,
         unit: form.unit.trim(),
         direction: form.direction,
         target_value: form.target_value.trim() ? Number(form.target_value) : null,
         is_required: form.is_required,
+        is_company_wide: isCompanyWide,
         functional_area_id: areaId ?? undefined,
         tenant_id: tenantId,
-      });
+      }).select("id").single();
       if (error) throw error;
+
+      // Insert user assignments
+      if (form.assignedUserIds.length > 0 && data) {
+        const { error: assignError } = await (supabase.from as any)("kpi_definition_users")
+          .insert(form.assignedUserIds.map((uid) => ({
+            kpi_id: data.id,
+            user_id: uid,
+            tenant_id: tenantId,
+          })));
+        if (assignError) throw assignError;
+      }
+
+      return data;
     },
     onSuccess: (_data, form) => {
-      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId ?? "__company__", tenantId] });
-      queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
-      queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
-      queryClient.invalidateQueries({ queryKey: ["kpi-company", tenantId] });
+      invalidateAll();
       writeAuditLog({
         tenantId,
         userId: authUser!.id,
         action: "create",
         entityType: "kpi_definition",
-        entityId: crypto.randomUUID(),
-        newValues: { name: form.name, unit: form.unit, direction: form.direction, target_value: form.target_value || null, functional_area_id: areaId },
+        entityId: _data?.id ?? crypto.randomUUID(),
+        newValues: { name: form.name, unit: form.unit, direction: form.direction, target_value: form.target_value || null, functional_area_id: areaId, is_company_wide: form.assignedUserIds.length === 0 ? true : form.is_company_wide, assigned_users: form.assignedUserIds },
       });
       setShowCreateForm(false);
       setCreateForm(emptyForm);
@@ -155,6 +223,8 @@ export default function KpiManagementSheet({
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, form }: { id: string; form: KpiFormData }) => {
+      const isCompanyWide = form.assignedUserIds.length === 0 ? true : form.is_company_wide;
+
       const { error } = await supabase
         .from("kpi_definitions")
         .update({
@@ -164,15 +234,25 @@ export default function KpiManagementSheet({
           direction: form.direction,
           target_value: form.target_value.trim() ? Number(form.target_value) : null,
           is_required: form.is_required,
+          is_company_wide: isCompanyWide,
         })
         .eq("id", id);
       if (error) throw error;
+
+      // Replace user assignments: delete old, insert new
+      await (supabase.from as any)("kpi_definition_users").delete().eq("kpi_id", id);
+      if (form.assignedUserIds.length > 0) {
+        const { error: assignError } = await (supabase.from as any)("kpi_definition_users")
+          .insert(form.assignedUserIds.map((uid) => ({
+            kpi_id: id,
+            user_id: uid,
+            tenant_id: tenantId,
+          })));
+        if (assignError) throw assignError;
+      }
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId ?? "__company__", tenantId] });
-      queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
-      queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
-      queryClient.invalidateQueries({ queryKey: ["kpi-company", tenantId] });
+      invalidateAll();
       const oldKpi = activeKpis.find((k) => k.id === variables.id);
       writeAuditLog({
         tenantId,
@@ -181,7 +261,7 @@ export default function KpiManagementSheet({
         entityType: "kpi_definition",
         entityId: variables.id,
         oldValues: oldKpi ? { name: oldKpi.name, unit: oldKpi.unit, direction: oldKpi.direction, target_value: oldKpi.target_value } : null,
-        newValues: { name: variables.form.name, unit: variables.form.unit, direction: variables.form.direction, target_value: variables.form.target_value || null },
+        newValues: { name: variables.form.name, unit: variables.form.unit, direction: variables.form.direction, target_value: variables.form.target_value || null, is_company_wide: variables.form.assignedUserIds.length === 0 ? true : variables.form.is_company_wide, assigned_users: variables.form.assignedUserIds },
       });
       setEditingId(null);
       toast({ title: "KPI aggiornato" });
@@ -193,7 +273,6 @@ export default function KpiManagementSheet({
 
   const deactivateMutation = useMutation({
     mutationFn: async (id: string) => {
-      // NEVER delete - only set is_active=false to preserve historical data
       const { error } = await supabase
         .from("kpi_definitions")
         .update({ is_active: false })
@@ -201,10 +280,7 @@ export default function KpiManagementSheet({
       if (error) throw error;
     },
     onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId ?? "__company__", tenantId] });
-      queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
-      queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
-      queryClient.invalidateQueries({ queryKey: ["kpi-company", tenantId] });
+      invalidateAll();
       writeAuditLog({
         tenantId,
         userId: authUser!.id,
@@ -215,10 +291,7 @@ export default function KpiManagementSheet({
         newValues: { is_active: false },
       });
       setConfirmDeactivateId(null);
-      toast({
-        title: "KPI disattivato",
-        description: "I dati storici saranno preservati",
-      });
+      toast({ title: "KPI disattivato", description: "I dati storici saranno preservati" });
     },
     onError: (err: Error) => {
       toast({ title: "Errore", description: err.message, variant: "destructive" });
@@ -234,9 +307,7 @@ export default function KpiManagementSheet({
       if (error) throw error;
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId ?? "__company__", tenantId] });
-      queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
-      queryClient.invalidateQueries({ queryKey: ["kpi-company", tenantId] });
+      invalidateAll();
       const kpi = activeKpis.find((k) => k.id === variables.id);
       writeAuditLog({
         tenantId,
@@ -265,6 +336,8 @@ export default function KpiManagementSheet({
       direction: kpi.direction,
       target_value: kpi.target_value != null ? String(kpi.target_value) : "",
       is_required: kpi.is_required ?? true,
+      is_company_wide: kpi.is_company_wide ?? false,
+      assignedUserIds: kpiUsersMap.get(kpi.id) ?? [],
     });
   };
 
@@ -280,6 +353,13 @@ export default function KpiManagementSheet({
 
   const activeKpis = kpis.data ?? [];
   const activeCount = activeKpis.length;
+  const users = tenantUsers.data ?? [];
+
+  // Build user name map
+  const userNameMap = new Map<string, string>();
+  for (const u of users) {
+    userNameMap.set(u.id, u.full_name);
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -321,6 +401,7 @@ export default function KpiManagementSheet({
                   onCancel={cancelEdit}
                   isPending={updateMutation.isPending}
                   submitLabel="Salva"
+                  users={users}
                 />
               </div>
             ) : (
@@ -331,7 +412,7 @@ export default function KpiManagementSheet({
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-sm truncate">{kpi.name}</span>
                         <Badge variant="outline" className="inline-flex items-center text-xs shrink-0">
                           {kpi.unit}
@@ -358,6 +439,26 @@ export default function KpiManagementSheet({
                           {formatTarget(kpi.target_value, kpi.unit)}
                         </p>
                       )}
+                      {/* Assignment info */}
+                      <div className="flex items-center gap-1 mt-2 flex-wrap">
+                        {kpi.is_company_wide && (
+                          <Badge variant="outline" className="text-[10px] gap-1">
+                            <Building2 className="h-3 w-3" />
+                            Aziendale
+                          </Badge>
+                        )}
+                        {(kpiUsersMap.get(kpi.id) ?? []).length > 0 && (
+                          <Badge variant="outline" className="text-[10px] gap-1">
+                            <Users className="h-3 w-3" />
+                            {(kpiUsersMap.get(kpi.id) ?? []).map((uid) => userNameMap.get(uid) ?? "?").join(", ")}
+                          </Badge>
+                        )}
+                        {!kpi.is_company_wide && (kpiUsersMap.get(kpi.id) ?? []).length === 0 && (
+                          <Badge variant="destructive" className="text-[10px]">
+                            Nessuna assegnazione
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -433,6 +534,7 @@ export default function KpiManagementSheet({
                 onCancel={cancelCreate}
                 isPending={createMutation.isPending}
                 submitLabel="Salva"
+                users={users}
               />
             </div>
           )}
@@ -461,6 +563,7 @@ function KpiForm({
   onCancel,
   isPending,
   submitLabel,
+  users,
 }: {
   form: KpiFormData;
   onChange: (form: KpiFormData) => void;
@@ -468,11 +571,23 @@ function KpiForm({
   onCancel: () => void;
   isPending: boolean;
   submitLabel: string;
+  users: { id: string; full_name: string; email: string; role: string }[];
 }) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit();
   };
+
+  const toggleUser = (userId: string) => {
+    const current = form.assignedUserIds;
+    if (current.includes(userId)) {
+      onChange({ ...form, assignedUserIds: current.filter((id) => id !== userId) });
+    } else {
+      onChange({ ...form, assignedUserIds: [...current, userId] });
+    }
+  };
+
+  const noUsersSelected = form.assignedUserIds.length === 0;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -537,6 +652,50 @@ function KpiForm({
           Obbligatorio nel pre-meeting
         </Label>
       </div>
+
+      {/* Assignment section */}
+      <div className="space-y-3 border-t border-border pt-4">
+        <Label className="text-sm font-medium">Assegnazione</Label>
+
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="kpi-company-wide"
+            checked={form.is_company_wide || noUsersSelected}
+            disabled={noUsersSelected}
+            onCheckedChange={(checked) => onChange({ ...form, is_company_wide: !!checked })}
+          />
+          <Label htmlFor="kpi-company-wide" className="text-sm flex items-center gap-1">
+            <Building2 className="h-3.5 w-3.5" />
+            Aziendale (tutti compilano)
+          </Label>
+        </div>
+        {noUsersSelected && !form.is_company_wide && (
+          <p className="text-xs text-muted-foreground">
+            Se nessun utente è selezionato, la KPI diventa automaticamente aziendale.
+          </p>
+        )}
+
+        <Label className="text-xs text-muted-foreground">Assegna a utenti specifici:</Label>
+        <div className="max-h-40 overflow-y-auto space-y-1 border border-border rounded-md p-2">
+          {users.map((u) => (
+            <label
+              key={u.id}
+              className="flex items-center gap-2 py-1 px-1 rounded hover:bg-muted/50 cursor-pointer text-sm"
+            >
+              <Checkbox
+                checked={form.assignedUserIds.includes(u.id)}
+                onCheckedChange={() => toggleUser(u.id)}
+              />
+              <span className="truncate">{u.full_name}</span>
+              <span className="text-xs text-muted-foreground ml-auto shrink-0">{u.role}</span>
+            </label>
+          ))}
+          {users.length === 0 && (
+            <p className="text-xs text-muted-foreground py-2 text-center">Nessun utente disponibile</p>
+          )}
+        </div>
+      </div>
+
       <div className="flex items-center gap-2 pt-2">
         <Button type="submit" disabled={isPending || !form.name.trim() || !form.unit.trim()}>
           {isPending ? "Salvataggio..." : submitLabel}
