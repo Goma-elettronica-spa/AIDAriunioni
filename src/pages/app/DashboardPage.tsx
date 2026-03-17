@@ -714,7 +714,7 @@ export default function DashboardPage() {
                       </span>
                     </span>
                     <span>
-                      Deadline pre-meeting:{" "}
+                      Data Apertura Upload:{" "}
                       <span className="text-foreground font-medium">
                         {new Date(meeting.pre_meeting_deadline).toLocaleDateString(
                           "it-IT",
