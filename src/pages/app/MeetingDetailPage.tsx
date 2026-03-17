@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  ArrowLeft, ChevronRight, Loader2, Sparkles, Pencil,
+  ArrowLeft, ChevronRight, Loader2, Pencil,
   Check, X, AlertTriangle, FileText, ListTodo, BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -49,7 +49,6 @@ export default function MeetingDetailPage() {
   const isAdmin = user?.role === "org_admin";
 
   const [activeTab, setActiveTab] = useState("overview");
-  const [triggerGenerate, setTriggerGenerate] = useState(false);
 
   // Edit sheet state
   const [editOpen, setEditOpen] = useState(false);
@@ -271,13 +270,15 @@ export default function MeetingDetailPage() {
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
               )}
-              <Badge
-                variant="secondary"
-                className={`inline-flex items-center text-xs gap-1.5 ${displayStatus === "completed" ? "bg-gray-800 text-white" : ""}`}
-              >
-                <span className={`h-2 w-2 rounded-full ${displayStatus === "completed" ? "bg-gray-300" : sc.dotClass}`} />
-                {sc.label}
-              </Badge>
+              {!isPast && (
+                <Badge
+                  variant="secondary"
+                  className={`inline-flex items-center text-xs gap-1.5 ${displayStatus === "completed" ? "bg-gray-800 text-white" : ""}`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${displayStatus === "completed" ? "bg-gray-300" : sc.dotClass}`} />
+                  {sc.label}
+                </Badge>
+              )}
               <Badge variant="outline" className="inline-flex items-center text-xs font-mono">
                 {m.quarter}
               </Badge>
@@ -359,8 +360,6 @@ export default function MeetingDetailPage() {
                 isAdmin={isAdmin}
                 transcriptUrl={m.transcript_url}
                 summaryText={m.summary_text}
-                triggerGenerate={triggerGenerate}
-                onGenerateHandled={() => setTriggerGenerate(false)}
               />
             </TabsContent>
             <TabsContent value="kpi">

@@ -15,7 +15,7 @@ import {
 import { useDroppable } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Lightbulb, TrendingUp, Scissors, Link2, Download, Trash2 } from "lucide-react";
+import { Lightbulb, TrendingUp, Scissors, Link2, Download, Trash2, Upload, FileDown, X as XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -36,13 +36,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+// Dialog import removed — using Sheet for creation
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -72,6 +66,8 @@ type UpgradeRequest = {
   position: number;
   created_at: string;
   updated_at: string;
+  attachment_url: string | null;
+  attachment_name: string | null;
 };
 
 type UpgradeCard = UpgradeRequest & {
@@ -82,6 +78,7 @@ type UpgradeCard = UpgradeRequest & {
 
 // ---------- Columns ----------
 const columns = [
+  { id: "proposed", label: "Proposed", color: "#7C3AED" },
   { id: "todo", label: "To Do", color: "var(--status-todo)" },
   { id: "wip", label: "Work in Progress", color: "var(--status-wip)" },
   { id: "done", label: "Done", color: "var(--status-done)" },
@@ -114,6 +111,7 @@ const reasonLabels: Record<string, string> = {
 };
 
 const statusLabels: Record<string, string> = {
+  proposed: "Proposed",
   todo: "To Do",
   wip: "Work in Progress",
   done: "Done",
@@ -329,6 +327,10 @@ export default function UpgradePage() {
   const [newReasonWhy, setNewReasonWhy] = useState<string>("revenue_generation");
   const [newValueUnit, setNewValueUnit] = useState<string>("money");
   const [newValueAmount, setNewValueAmount] = useState<string>("");
+  const [newAreaFilter, setNewAreaFilter] = useState<string>("all");
+  const [newAttachmentFile, setNewAttachmentFile] = useState<File | null>(null);
+  const [newAttachmentUploading, setNewAttachmentUploading] = useState(false);
+  const [detailAttachmentUploading, setDetailAttachmentUploading] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -341,7 +343,7 @@ export default function UpgradePage() {
     queryFn: async () => {
       const { data, error } = await (supabase.from as any)("upgrade_requests")
         .select(
-          "id, tenant_id, meeting_id, created_by_user_id, owner_user_id, title, description, linked_kpi_id, reason_why, value_unit, value_amount, reviewed_value_unit, reviewed_value_amount, reviewed_by, reviewed_at, review_note, status, position, created_at, updated_at"
+          "id, tenant_id, meeting_id, created_by_user_id, owner_user_id, title, description, linked_kpi_id, reason_why, value_unit, value_amount, reviewed_value_unit, reviewed_value_amount, reviewed_by, reviewed_at, review_note, status, position, created_at, updated_at, attachment_url, attachment_name"
         )
         .eq("tenant_id", tenantId!);
       if (error) throw error;
@@ -416,6 +418,19 @@ export default function UpgradePage() {
     },
   });
 
+  const functionalAreas = useQuery({
+    queryKey: ["upgrade-functional-areas", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("functional_areas")
+        .select("id, name")
+        .eq("tenant_id", tenantId!)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as { id: string; name: string }[];
+    },
+  });
+
   const valueOptions = useQuery({
     queryKey: ["value-unit-options", tenantId],
     enabled: !!tenantId,
@@ -428,6 +443,17 @@ export default function UpgradePage() {
     },
   });
 
+  // Filtered KPIs based on area filter
+  const filteredKpiDefinitions = useMemo(() => {
+    if (!kpiDefinitions.data) return [];
+    if (newAreaFilter === "all") return kpiDefinitions.data;
+    // The kpi_definitions query joins functional_areas(name) so area is the name.
+    // We need to match by functional_area_id. Let's find the area name from our areas list.
+    const selectedArea = functionalAreas.data?.find((a) => a.id === newAreaFilter);
+    if (!selectedArea) return kpiDefinitions.data;
+    return kpiDefinitions.data.filter((k) => k.area === selectedArea.name);
+  }, [kpiDefinitions.data, newAreaFilter, functionalAreas.data]);
+
   // ---------- Reset create dialog on open ----------
   useEffect(() => {
     if (createOpen) {
@@ -438,6 +464,8 @@ export default function UpgradePage() {
       setNewReasonWhy("revenue_generation");
       setNewValueUnit("money");
       setNewValueAmount("");
+      setNewAreaFilter("all");
+      setNewAttachmentFile(null);
     }
   }, [createOpen, user?.id]);
 
@@ -458,7 +486,7 @@ export default function UpgradePage() {
     for (const col of columns) map[col.id] = [];
     for (const c of filtered) {
       if (map[c.status]) map[c.status].push(c);
-      else if (map.todo) map.todo.push(c);
+      else if (map.proposed) map.proposed.push(c);
     }
     return map;
   }, [filtered]);
@@ -524,7 +552,8 @@ export default function UpgradePage() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await (supabase.from as any)("upgrade_requests").insert({
+      // First insert the record
+      const { data: inserted, error } = await (supabase.from as any)("upgrade_requests").insert({
         tenant_id: tenantId,
         created_by_user_id: user?.id,
         owner_user_id: newOwnerId,
@@ -534,10 +563,33 @@ export default function UpgradePage() {
         reason_why: newReasonWhy,
         value_unit: newValueUnit,
         value_amount: parseFloat(newValueAmount) || 0,
-        status: "todo",
+        status: "proposed",
         position: 0,
-      });
+      }).select("id").single();
       if (error) throw error;
+
+      // Upload attachment if present
+      if (newAttachmentFile && inserted?.id) {
+        setNewAttachmentUploading(true);
+        const filePath = `${tenantId}/upgrades/${inserted.id}/${newAttachmentFile.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from("documents")
+          .upload(filePath, newAttachmentFile, { upsert: true });
+        if (uploadError) {
+          console.error("Attachment upload error:", uploadError);
+        } else {
+          const { data: urlData } = supabase.storage
+            .from("documents")
+            .getPublicUrl(filePath);
+          await (supabase.from as any)("upgrade_requests")
+            .update({
+              attachment_url: urlData?.publicUrl ?? filePath,
+              attachment_name: newAttachmentFile.name,
+            })
+            .eq("id", inserted.id);
+        }
+        setNewAttachmentUploading(false);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["upgrade-requests"] });
@@ -907,7 +959,8 @@ Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
                 value={newDescription}
                 onChange={(e) => setNewDescription(e.target.value)}
                 placeholder="Opzionale"
-                rows={2}
+                rows={6}
+                className="w-full"
               />
             </div>
 
@@ -928,6 +981,24 @@ Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
               </Select>
             </div>
 
+            {/* Area Funzionale filter */}
+            <div className="space-y-2">
+              <Label>Area Funzionale</Label>
+              <Select value={newAreaFilter} onValueChange={(v) => { setNewAreaFilter(v); setNewLinkedKpi("none"); }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Tutte le aree" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutte le aree</SelectItem>
+                  {functionalAreas.data?.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Collega a KPI */}
             <div className="space-y-2">
               <Label>Collega a KPI</Label>
@@ -937,7 +1008,7 @@ Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Nessuno</SelectItem>
-                  {kpiDefinitions.data?.map((k) => (
+                  {filteredKpiDefinitions.map((k) => (
                     <SelectItem key={k.id} value={k.id}>
                       {k.area ? `${k.area}: ${k.name}` : k.name}
                     </SelectItem>
@@ -1003,6 +1074,39 @@ Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
               />
             </div>
 
+            {/* Allegato */}
+            <div className="space-y-2">
+              <Label>Allegato</Label>
+              {newAttachmentFile ? (
+                <div className="flex items-center gap-2 p-3 border border-border rounded-md bg-muted/30">
+                  <Upload className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm text-foreground truncate flex-1">{newAttachmentFile.name}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0"
+                    onClick={() => setNewAttachmentFile(null)}
+                  >
+                    <XIcon className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-border rounded-md cursor-pointer hover:bg-muted/30 transition-colors">
+                  <Upload className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Carica file (PDF, Word, Excel, immagini)</span>
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) setNewAttachmentFile(f);
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+
             <div className="flex gap-2 pt-2">
               <Button
                 type="button"
@@ -1017,12 +1121,13 @@ Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
                 className="flex-1"
                 disabled={
                   createMutation.isPending ||
+                  newAttachmentUploading ||
                   !newTitle.trim() ||
                   !newOwnerId ||
                   !newValueAmount
                 }
               >
-                {createMutation.isPending ? "Creazione..." : "Crea Richiesta"}
+                {createMutation.isPending || newAttachmentUploading ? "Creazione..." : "Crea Richiesta"}
               </Button>
             </div>
           </form>
@@ -1213,6 +1318,73 @@ Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
                 </div>
               )}
 
+              {/* Attachment */}
+              <div className="space-y-2">
+                <Label>Allegato</Label>
+                {selectedCard.attachment_url && selectedCard.attachment_name ? (
+                  <div className="flex items-center gap-2 p-3 border border-border rounded-md bg-muted/30">
+                    <FileDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <a
+                      href={selectedCard.attachment_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:underline truncate flex-1"
+                    >
+                      {selectedCard.attachment_name}
+                    </a>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Nessun allegato</p>
+                )}
+                {/* Replace/upload attachment */}
+                {(isIOAdmin || selectedCard.created_by_user_id === user?.id) && (
+                  <label className="flex items-center justify-center gap-2 p-3 border-2 border-dashed border-border rounded-md cursor-pointer hover:bg-muted/30 transition-colors">
+                    <Upload className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      {detailAttachmentUploading ? "Caricamento..." : selectedCard.attachment_url ? "Sostituisci allegato" : "Carica allegato"}
+                    </span>
+                    <input
+                      type="file"
+                      className="hidden"
+                      disabled={detailAttachmentUploading}
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0];
+                        if (!f || !selectedCard) return;
+                        setDetailAttachmentUploading(true);
+                        try {
+                          const filePath = `${tenantId}/upgrades/${selectedCard.id}/${f.name}`;
+                          const { error: uploadError } = await supabase.storage
+                            .from("documents")
+                            .upload(filePath, f, { upsert: true });
+                          if (uploadError) throw uploadError;
+                          const { data: urlData } = supabase.storage
+                            .from("documents")
+                            .getPublicUrl(filePath);
+                          await (supabase.from as any)("upgrade_requests")
+                            .update({
+                              attachment_url: urlData?.publicUrl ?? filePath,
+                              attachment_name: f.name,
+                            })
+                            .eq("id", selectedCard.id);
+                          queryClient.invalidateQueries({ queryKey: ["upgrade-requests"] });
+                          toast({ title: "Allegato caricato" });
+                          // Update the selected card locally
+                          setSelectedCard({
+                            ...selectedCard,
+                            attachment_url: urlData?.publicUrl ?? filePath,
+                            attachment_name: f.name,
+                          });
+                        } catch (err: any) {
+                          toast({ title: "Errore upload", description: err.message, variant: "destructive" });
+                        } finally {
+                          setDetailAttachmentUploading(false);
+                        }
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+
               {/* Download .md button + Delete */}
               <div className="border-t border-border pt-4 space-y-2">
                 <Button
@@ -1223,10 +1395,10 @@ Generato da Riunioni in Cloud il ${new Date().toLocaleDateString("it-IT")}
                   <Download className="h-4 w-4 mr-2" />
                   Scarica .md
                 </Button>
-                {isIOAdmin && (
+                {(isIOAdmin || selectedCard.created_by_user_id === user?.id) && (
                   <Button
-                    variant="destructive"
-                    className="w-full"
+                    variant="ghost"
+                    className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => setDeleteConfirmOpen(true)}
                   >
                     <Trash2 className="h-4 w-4 mr-2" />

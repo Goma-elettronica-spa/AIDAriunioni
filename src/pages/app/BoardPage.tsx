@@ -422,6 +422,13 @@ export default function BoardPage() {
     return selectedTask.created_by_user_id === user.id;
   }, [selectedTask, user]);
 
+  // Permission check for deleting (creator or admin)
+  const canDelete = useMemo(() => {
+    if (!selectedTask || !user) return false;
+    if (user.role === "org_admin" || user.role === "information_officer") return true;
+    return selectedTask.created_by_user_id === user.id;
+  }, [selectedTask, user]);
+
   // Filtered tasks — only top-level (parent_task_id is null)
   const filtered = useMemo(() => {
     if (!tasks.data) return [];
@@ -830,22 +837,25 @@ export default function BoardPage() {
 
               {/* Save button */}
               {canEdit && (
-                <div className="flex gap-2">
-                  <Button
-                    className="flex-1"
-                    onClick={() => updateTaskMutation.mutate()}
-                    disabled={updateTaskMutation.isPending || !editTitle.trim()}
-                  >
-                    {updateTaskMutation.isPending ? "Salvataggio..." : "Salva"}
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    onClick={() => setDeleteConfirmOpen(true)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+                <Button
+                  className="w-full"
+                  onClick={() => updateTaskMutation.mutate()}
+                  disabled={updateTaskMutation.isPending || !editTitle.trim()}
+                >
+                  {updateTaskMutation.isPending ? "Salvataggio..." : "Salva"}
+                </Button>
+              )}
+
+              {/* Delete button — available to creator or admin */}
+              {canDelete && (
+                <Button
+                  variant="ghost"
+                  className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => setDeleteConfirmOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Elimina task
+                </Button>
               )}
             </div>
           )}
@@ -856,7 +866,7 @@ export default function BoardPage() {
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Eliminare questo task?</AlertDialogTitle>
+            <AlertDialogTitle>Sei sicuro di voler eliminare questo task?</AlertDialogTitle>
             <AlertDialogDescription>
               Questa azione è irreversibile. Il task e tutti i sotto-task verranno eliminati.
             </AlertDialogDescription>
