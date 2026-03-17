@@ -378,160 +378,200 @@ export function MaterialeTab({ meeting, isAdmin }: Props) {
       <div>
         <h2 className="text-lg font-semibold text-foreground mb-4">Riassunto Operativo</h2>
 
-        {/* Show PDF download if available */}
-        {summaryPdfUrl && (
-          <Card className="border border-border mb-4">
-            <CardContent className="flex items-center justify-between p-6">
-              <div className="flex items-center gap-3">
-                <FileText className="h-5 w-5 text-muted-foreground" />
-                <span className="text-sm font-medium text-foreground">Riassunto PDF</span>
-              </div>
-              <Button variant="outline" size="sm" asChild>
-                <a href={summaryPdfUrl} target="_blank" rel="noopener noreferrer">
-                  <Download className="h-3.5 w-3.5 mr-1.5" />
-                  Scarica PDF
-                </a>
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+        <div className="space-y-6">
+          {/* --- 3A: Riassunto Testuale (txt / md / incolla) --- */}
+          <div>
+            <h3 className="text-sm font-medium text-muted-foreground mb-2">Riassunto Testuale</h3>
 
-        {summaryText && summaryMode === "view" ? (
-          <Card className="border border-border">
-            <CardContent className="p-6">
-              <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed mb-3">
-                {summaryText}
-              </pre>
-              {isAdmin && (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSummaryDraft(summaryText);
-                      setSummaryMode("edit");
-                    }}
-                  >
-                    <Pencil className="h-3.5 w-3.5 mr-1.5" />
-                    Modifica
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => summaryFileInputRef.current?.click()}
-                  >
-                    <Upload className="h-3.5 w-3.5 mr-1.5" />
-                    Sostituisci
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={shareSummaryWithTeam}
-                    disabled={sharing}
-                  >
-                    {sharing ? (
-                      <>
+            {summaryText && summaryMode === "view" ? (
+              <Card className="border border-border">
+                <CardContent className="p-6">
+                  <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed mb-3">
+                    {summaryText}
+                  </pre>
+                  {isAdmin && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSummaryDraft(summaryText);
+                          setSummaryMode("edit");
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                        Modifica
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={shareSummaryWithTeam}
+                        disabled={sharing}
+                      >
+                        {sharing ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                            Invio in corso...
+                          </>
+                        ) : (
+                          <>
+                            <Share2 className="h-3.5 w-3.5 mr-1.5" />
+                            Condividi con il team
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ) : summaryMode === "edit" ? (
+              <Card className="border border-border">
+                <CardContent className="p-6 space-y-3">
+                  <Textarea
+                    value={summaryDraft}
+                    onChange={(e) => setSummaryDraft(e.target.value)}
+                    rows={10}
+                    className="min-h-[200px] text-sm leading-relaxed"
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" onClick={() => saveSummary(summaryDraft)} disabled={saving}>
+                      {saving ? (
                         <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                        Invio in corso...
-                      </>
-                    ) : (
-                      <>
-                        <Share2 className="h-3.5 w-3.5 mr-1.5" />
-                        Condividi con il team
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ) : summaryMode === "edit" ? (
-          <Card className="border border-border">
-            <CardContent className="p-6 space-y-3">
-              <Textarea
-                value={summaryDraft}
-                onChange={(e) => setSummaryDraft(e.target.value)}
-                rows={10}
-                className="min-h-[200px] text-sm leading-relaxed"
-              />
-              <div className="flex items-center gap-2">
-                <Button size="sm" onClick={() => saveSummary(summaryDraft)} disabled={saving}>
-                  {saving ? (
-                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                  ) : (
-                    <Save className="h-3.5 w-3.5 mr-1.5" />
-                  )}
-                  Salva
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setSummaryMode("view")}>
-                  Annulla
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : summaryMode === "paste" || (!summaryText && isAdmin) ? (
-          <div className="space-y-4">
-            {/* Option A: Upload file (PDF or Markdown) */}
-            <div
-              className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:bg-muted/20 transition-colors"
-              onClick={() => summaryFileInputRef.current?.click()}
-            >
-              {uploadingSummary ? (
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto" />
-              ) : (
-                <>
-                  <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Carica file (.pdf, .md, .txt) oppure incolla il testo
-                  </p>
-                </>
-              )}
-            </div>
-
-            <p className="text-xs text-muted-foreground text-center">oppure incolla testo</p>
-
-            {/* Option B: Paste text */}
-            <Card className="border border-border">
-              <CardContent className="p-6 space-y-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <ClipboardPaste className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium text-foreground">Incolla testo</span>
-                </div>
-                <Textarea
-                  value={summaryDraft}
-                  onChange={(e) => setSummaryDraft(e.target.value)}
-                  placeholder="Incolla qui il riassunto..."
-                  rows={8}
-                  className="min-h-[160px] text-sm leading-relaxed"
-                />
-                <Button
-                  size="sm"
-                  onClick={() => saveSummary(summaryDraft)}
-                  disabled={saving || !summaryDraft.trim()}
+                      ) : (
+                        <Save className="h-3.5 w-3.5 mr-1.5" />
+                      )}
+                      Salva
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setSummaryMode("view")}>
+                      Annulla
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : isAdmin ? (
+              <div className="space-y-4">
+                <div
+                  className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:bg-muted/20 transition-colors"
+                  onClick={() => summaryTextInputRef.current?.click()}
                 >
-                  {saving ? (
-                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  {uploadingSummary ? (
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto" />
                   ) : (
-                    <Save className="h-3.5 w-3.5 mr-1.5" />
+                    <>
+                      <Upload className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">
+                        Carica file .txt o .md
+                      </p>
+                    </>
                   )}
-                  Salva
-                </Button>
-              </CardContent>
-            </Card>
+                </div>
+                <p className="text-xs text-muted-foreground text-center">oppure incolla testo</p>
+                <Card className="border border-border">
+                  <CardContent className="p-6 space-y-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <ClipboardPaste className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium text-foreground">Incolla testo</span>
+                    </div>
+                    <Textarea
+                      value={summaryDraft}
+                      onChange={(e) => setSummaryDraft(e.target.value)}
+                      placeholder="Incolla qui il riassunto..."
+                      rows={6}
+                      className="min-h-[120px] text-sm leading-relaxed"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => saveSummary(summaryDraft)}
+                      disabled={saving || !summaryDraft.trim()}
+                    >
+                      {saving ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <Save className="h-3.5 w-3.5 mr-1.5" />
+                      )}
+                      Salva
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nessun riassunto testuale disponibile.</p>
+            )}
           </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">Nessun riassunto disponibile.</p>
-        )}
 
-        {/* Hidden file input for summary uploads */}
+          {/* --- 3B: Riassunto PDF --- */}
+          <div>
+            <h3 className="text-sm font-medium text-muted-foreground mb-2">Riassunto PDF</h3>
+
+            {summaryPdfUrl ? (
+              <Card className="border border-border">
+                <CardContent className="flex items-center justify-between p-6">
+                  <div className="flex items-center gap-3">
+                    <FileText className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-sm font-medium text-foreground">Riassunto PDF</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={summaryPdfUrl} target="_blank" rel="noopener noreferrer">
+                        <Download className="h-3.5 w-3.5 mr-1.5" />
+                        Scarica PDF
+                      </a>
+                    </Button>
+                    {isAdmin && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => summaryPdfInputRef.current?.click()}
+                      >
+                        <Upload className="h-3.5 w-3.5 mr-1.5" />
+                        Sostituisci
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ) : isAdmin ? (
+              <div
+                className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:bg-muted/20 transition-colors"
+                onClick={() => summaryPdfInputRef.current?.click()}
+              >
+                {uploadingPdf ? (
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto" />
+                ) : (
+                  <>
+                    <FileText className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Carica il riassunto in PDF
+                    </p>
+                  </>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nessun PDF disponibile.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Hidden file inputs */}
         <input
-          ref={summaryFileInputRef}
+          ref={summaryTextInputRef}
           type="file"
-          accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown"
+          accept=".txt,.md,text/plain,text/markdown"
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) handleSummaryFileUpload(f);
+            if (f) handleSummaryTextUpload(f);
+            e.target.value = "";
+          }}
+        />
+        <input
+          ref={summaryPdfInputRef}
+          type="file"
+          accept=".pdf,application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleSummaryPdfUpload(f);
             e.target.value = "";
           }}
         />
