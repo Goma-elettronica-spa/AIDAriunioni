@@ -23,6 +23,13 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 
+const roleLabels: Record<string, string> = {
+  org_admin: "Admin",
+  information_officer: "Information Officer",
+  dirigente: "Dirigente",
+  superadmin: "Superadmin",
+};
+
 const meetingStatusConfig: Record<string, { label: string; dotClass: string }> = {
   draft: { label: "Bozza", dotClass: "bg-muted-foreground" },
   pre_meeting: { label: "Pre-Meeting", dotClass: "bg-[hsl(var(--status-waiting))]" },
