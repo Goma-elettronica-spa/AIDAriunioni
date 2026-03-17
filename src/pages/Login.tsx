@@ -784,9 +784,26 @@ export default function Login() {
 
           {/* Error Message */}
           {error && (
-            <p className="mt-4 text-sm text-center text-destructive font-medium">
-              {error}
-            </p>
+            <div className="mt-4 space-y-2">
+              <p className="text-sm text-center text-destructive font-medium">
+                {error}
+              </p>
+              {showResendConfirmation && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={handleResendConfirmation}
+                  disabled={loading || rateLimitCountdown > 0}
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
+                  Reinvia email di conferma
+                </Button>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
