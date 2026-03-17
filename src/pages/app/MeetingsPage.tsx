@@ -80,6 +80,8 @@ export default function MeetingsPage() {
   const [title, setTitle] = useState("");
   const [scheduledDate, setScheduledDate] = useState<Date | undefined>();
   const [deadline, setDeadline] = useState<Date | undefined>();
+  const currentYear = new Date().getFullYear();
+  const [selectedQuarter, setSelectedQuarter] = useState(`Q1-${currentYear}`);
 
   // Meetings
   const meetings = useQuery({
