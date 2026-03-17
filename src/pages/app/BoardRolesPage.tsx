@@ -592,7 +592,6 @@ export default function BoardRolesPage() {
                           <SelectContent>
                             <SelectItem value="__cancel__">Annulla</SelectItem>
                             {users
-                              .filter((u) => !u.board_role_id || u.id === assignedUser?.id)
                               .filter((u) => u.id !== assignedUser?.id)
                               .map((u) => (
                                 <SelectItem key={u.id} value={u.id}>
