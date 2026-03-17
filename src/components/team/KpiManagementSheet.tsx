@@ -199,7 +199,7 @@ export default function KpiManagementSheet({
       if (error) throw error;
     },
     onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId, tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId ?? "__company__", tenantId] });
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
       writeAuditLog({
