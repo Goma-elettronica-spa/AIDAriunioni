@@ -19,9 +19,10 @@ import {
 import { toast } from "@/hooks/use-toast";
 
 import { OverviewTab } from "@/components/meeting-detail/OverviewTab";
-import { AttachmentsTab } from "@/components/meeting-detail/AttachmentsTab";
 import { MaterialeTab } from "@/components/meeting-detail/MaterialeTab";
+import { PostMeetingTab } from "@/components/meeting-detail/PostMeetingTab";
 import { TasksTab } from "@/components/meeting-detail/TasksTab";
+import { UpgradeTab } from "@/components/meeting-detail/UpgradeTab";
 import { KpiTab } from "@/components/meeting-detail/KpiTab";
 
 const statusConfig: Record<string, { label: string; dotClass: string }> = {
@@ -331,6 +332,7 @@ export default function MeetingDetailPage() {
               { value: "attachments", label: "Attachments" },
               { value: "post_meeting", label: "Post Meeting" },
               { value: "tasks", label: "Task" },
+              { value: "upgrade", label: "Upgrade" },
               { value: "kpi", label: "KPI" },
             ].map((tab) => (
               <TabsTrigger
@@ -348,13 +350,22 @@ export default function MeetingDetailPage() {
               <OverviewTab meeting={m} isAdmin={isAdmin} />
             </TabsContent>
             <TabsContent value="attachments">
-              <AttachmentsTab meeting={m} />
+              <MaterialeTab meeting={m} isAdmin={isAdmin} />
             </TabsContent>
             <TabsContent value="post_meeting">
-              <MaterialeTab meeting={m} isAdmin={isAdmin} />
+              <PostMeetingTab meeting={m} />
             </TabsContent>
             <TabsContent value="tasks">
               <TasksTab
+                meetingId={m.id}
+                tenantId={m.tenant_id}
+                isAdmin={isAdmin}
+                transcriptUrl={m.transcript_url}
+                summaryText={m.summary_text}
+              />
+            </TabsContent>
+            <TabsContent value="upgrade">
+              <UpgradeTab
                 meetingId={m.id}
                 tenantId={m.tenant_id}
                 isAdmin={isAdmin}

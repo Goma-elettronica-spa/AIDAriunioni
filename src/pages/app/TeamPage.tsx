@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   UserPlus, Pencil, Power, Check, X, BarChart3, ChevronDown, ChevronRight,
-  Plus, EyeOff, Mail, CheckCircle, Clock,
+  Plus, EyeOff, Mail, CheckCircle, Clock, TrendingUp, TrendingDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -82,6 +82,8 @@ type KpiEntry = {
   id: string;
   kpi_id: string;
   current_value: number;
+  delta_percent: number | null;
+  is_improved: boolean | null;
   created_at: string;
 };
 
@@ -601,7 +603,7 @@ export default function TeamPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("kpi_entries")
-        .select("id, kpi_id, current_value, created_at")
+        .select("id, kpi_id, current_value, delta_percent, is_improved, created_at")
         .eq("tenant_id", tenantId!)
         .order("created_at", { ascending: false });
       if (error) throw error;

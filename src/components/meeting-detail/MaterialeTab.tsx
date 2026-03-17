@@ -54,6 +54,7 @@ export function MaterialeTab({ meeting, isAdmin }: Props) {
   const summaryFileInputRef = useRef<HTMLInputElement>(null);
 
   const summaryText = meeting.summary_text ?? null;
+  const summaryPdfUrl = meeting.summary_pdf_url ?? null;
 
   const transcriptIsDocx = meeting.transcript_url
     ? meeting.transcript_url.toLowerCase().endsWith(".docx")
@@ -159,18 +160,57 @@ export function MaterialeTab({ meeting, isAdmin }: Props) {
 
   const handleSummaryFileUpload = async (file: File) => {
     const ext = getFileExtension(file.name);
-    if (![".txt", ".md"].includes(ext)) {
-      toast({ title: "Formato non supportato. Usa file .txt o .md", variant: "destructive" });
+
+    // PDF upload -> store in Supabase Storage, save URL
+    if (ext === ".pdf") {
+      setUploadingSummary(true);
+      try {
+        const path = `${meeting.tenant_id}/${meeting.id}/summary_${file.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from("documents")
+          .upload(path, file, { upsert: true });
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage.from("documents").getPublicUrl(path);
+
+        const { error: updateError } = await supabase
+          .from("meetings")
+          .update({ summary_pdf_url: urlData.publicUrl })
+          .eq("id", meeting.id);
+        if (updateError) throw updateError;
+
+        queryClient.invalidateQueries({ queryKey: ["meeting-detail", meeting.id] });
+        writeAuditLog({
+          tenantId: meeting.tenant_id,
+          userId: user!.id,
+          action: "update",
+          entityType: "meeting_summary",
+          entityId: meeting.id,
+          oldValues: { summary_pdf_url: summaryPdfUrl },
+          newValues: { summary_pdf_url: urlData.publicUrl },
+        });
+        toast({ title: "PDF riassunto caricato" });
+      } catch (err: any) {
+        toast({ title: "Errore upload PDF", description: err.message, variant: "destructive" });
+      }
+      setUploadingSummary(false);
       return;
     }
-    setUploadingSummary(true);
-    try {
-      const text = await file.text();
-      await saveSummary(text);
-    } catch (err: any) {
-      toast({ title: "Errore lettura file", description: err.message, variant: "destructive" });
+
+    // .md / .txt -> read content and save as text
+    if ([".txt", ".md"].includes(ext)) {
+      setUploadingSummary(true);
+      try {
+        const text = await file.text();
+        await saveSummary(text);
+      } catch (err: any) {
+        toast({ title: "Errore lettura file", description: err.message, variant: "destructive" });
+      }
+      setUploadingSummary(false);
+      return;
     }
-    setUploadingSummary(false);
+
+    toast({ title: "Formato non supportato. Usa file .pdf, .md o .txt", variant: "destructive" });
   };
 
   const shareSummaryWithTeam = async () => {
@@ -229,7 +269,7 @@ export function MaterialeTab({ meeting, isAdmin }: Props) {
 
   return (
     <div className="space-y-8">
-      {/* ── Section 1: Video ── */}
+      {/* -- Section 1: Video -- */}
       <div>
         <h2 className="text-lg font-semibold text-foreground mb-4">Video</h2>
         {meeting.video_url ? (
@@ -274,7 +314,7 @@ export function MaterialeTab({ meeting, isAdmin }: Props) {
         />
       </div>
 
-      {/* ── Section 2: Trascrizione ── */}
+      {/* -- Section 2: Trascrizione -- */}
       <div>
         <h2 className="text-lg font-semibold text-foreground mb-4">Trascrizione</h2>
         {meeting.transcript_url ? (
@@ -334,9 +374,27 @@ export function MaterialeTab({ meeting, isAdmin }: Props) {
         />
       </div>
 
-      {/* ── Section 3: Riassunto Operativo ── */}
+      {/* -- Section 3: Riassunto Operativo -- */}
       <div>
         <h2 className="text-lg font-semibold text-foreground mb-4">Riassunto Operativo</h2>
+
+        {/* Show PDF download if available */}
+        {summaryPdfUrl && (
+          <Card className="border border-border mb-4">
+            <CardContent className="flex items-center justify-between p-6">
+              <div className="flex items-center gap-3">
+                <FileText className="h-5 w-5 text-muted-foreground" />
+                <span className="text-sm font-medium text-foreground">Riassunto PDF</span>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <a href={summaryPdfUrl} target="_blank" rel="noopener noreferrer">
+                  <Download className="h-3.5 w-3.5 mr-1.5" />
+                  Scarica PDF
+                </a>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {summaryText && summaryMode === "view" ? (
           <Card className="border border-border">
@@ -413,7 +471,7 @@ export function MaterialeTab({ meeting, isAdmin }: Props) {
           </Card>
         ) : summaryMode === "paste" || (!summaryText && isAdmin) ? (
           <div className="space-y-4">
-            {/* Option A: Upload file */}
+            {/* Option A: Upload file (PDF or Markdown) */}
             <div
               className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:bg-muted/20 transition-colors"
               onClick={() => summaryFileInputRef.current?.click()}
@@ -424,11 +482,13 @@ export function MaterialeTab({ meeting, isAdmin }: Props) {
                 <>
                   <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">
-                    Carica un file di riassunto (.txt, .md)
+                    Carica file (.pdf, .md, .txt) oppure incolla il testo
                   </p>
                 </>
               )}
             </div>
+
+            <p className="text-xs text-muted-foreground text-center">oppure incolla testo</p>
 
             {/* Option B: Paste text */}
             <Card className="border border-border">
@@ -467,7 +527,7 @@ export function MaterialeTab({ meeting, isAdmin }: Props) {
         <input
           ref={summaryFileInputRef}
           type="file"
-          accept=".txt,.md,text/plain,text/markdown"
+          accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown"
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
@@ -477,7 +537,7 @@ export function MaterialeTab({ meeting, isAdmin }: Props) {
         />
       </div>
 
-      {/* ── Section 4: Documenti Scaricabili ── */}
+      {/* -- Section 4: Documenti Scaricabili -- */}
       <div>
         <h2 className="text-lg font-semibold text-foreground mb-4">Documenti Scaricabili</h2>
         {docs.length > 0 ? (

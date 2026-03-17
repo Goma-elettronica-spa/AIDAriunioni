@@ -60,6 +60,7 @@ interface EditState {
   title: string;
   description: string;
   assigned_user_id: string;
+  deadline_date: string;
 }
 
 const statusConfig: Record<string, { label: string; dotClass: string }> = {
@@ -82,6 +83,26 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl, summaryT
   const [generating, setGenerating] = useState(false);
   const [showRejected, setShowRejected] = useState(false);
   const [edits, setEdits] = useState<Record<string, EditState>>({});
+
+  // Fetch next meeting date for default deadline
+  const nextMeeting = useQuery({
+    queryKey: ["next-meeting", tenantId],
+    queryFn: async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const { data, error } = await supabase
+        .from("meetings")
+        .select("id, scheduled_date")
+        .eq("tenant_id", tenantId)
+        .gt("scheduled_date", today)
+        .order("scheduled_date", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.scheduled_date ?? "";
+    },
+  });
+
+  const defaultDeadline = nextMeeting.data || new Date().toISOString().slice(0, 10);
 
   // Fetch tenant users for assignment dropdown
   const tenantUsers = useQuery({
@@ -165,12 +186,13 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl, summaryT
             title: st.title,
             description: st.description ?? "",
             assigned_user_id: matchedUserId,
+            deadline_date: defaultDeadline,
           };
         }
       }
       setEdits((prev) => ({ ...prev, ...newEdits }));
     }
-  }, [suggestedTasks.data, tenantUsers.data]);
+  }, [suggestedTasks.data, tenantUsers.data, defaultDeadline]);
 
   // Handle triggerGenerate from parent (Claudietto button)
   useEffect(() => {
@@ -180,8 +202,7 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl, summaryT
     }
   }, [triggerGenerate]);
 
-  const generateSuggestedTasks = async () => {
-    // Gather the text to analyze: prefer transcript, fall back to summary_text
+  const getTranscriptText = async (): Promise<string> => {
     let transcriptText = "";
 
     if (transcriptUrl) {
@@ -199,6 +220,12 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl, summaryT
     if (!transcriptText && summaryText) {
       transcriptText = summaryText;
     }
+
+    return transcriptText;
+  };
+
+  const generateSuggestedTasks = async () => {
+    const transcriptText = await getTranscriptText();
 
     if (!transcriptText) {
       toast({
@@ -283,7 +310,7 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl, summaryT
         suggested_task_id: st.id,
         status: "todo",
         deadline_type: "next_meeting",
-        deadline_date: new Date().toISOString().slice(0, 10),
+        deadline_date: edit.deadline_date || new Date().toISOString().slice(0, 10),
         position: 0,
       });
       if (insertError) throw insertError;
@@ -366,26 +393,29 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl, summaryT
 
   return (
     <div className="space-y-8">
-      {/* AI Suggest button */}
+      {/* AI Generation Section */}
       {isAdmin && (transcriptUrl || summaryText) && (
-        <div className="flex items-center gap-3">
-          <Button
-            className="bg-foreground text-background hover:bg-foreground/90"
-            onClick={generateSuggestedTasks}
-            disabled={generating}
-          >
-            {generating ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Analisi trascrizione in corso...
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4 mr-2" />
-                Claudietto suggeriscimi Task
-              </>
-            )}
-          </Button>
+        <div>
+          <h3 className="text-sm font-medium text-foreground mb-3">Genera con AI</h3>
+          <div className="flex items-center gap-3">
+            <Button
+              className="bg-foreground text-background hover:bg-foreground/90"
+              onClick={generateSuggestedTasks}
+              disabled={generating}
+            >
+              {generating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Analisi in corso...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Suggerisci Task dall'AI
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       )}
 
@@ -399,6 +429,7 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl, summaryT
                 title: st.title,
                 description: st.description ?? "",
                 assigned_user_id: "",
+                deadline_date: defaultDeadline,
               };
               return (
                 <Card key={st.id} className="border border-border">
@@ -428,26 +459,39 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl, summaryT
                       className="text-sm"
                     />
 
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">
-                        Assegna a
-                      </label>
-                      <Select
-                        value={edit.assigned_user_id}
-                        onValueChange={(val) => updateEdit(st.id, "assigned_user_id", val)}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Seleziona utente" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(tenantUsers.data ?? []).map((u) => (
-                            <SelectItem key={u.id} value={u.id}>
-                              {u.full_name}
-                              {u.job_title ? ` \u2014 ${u.job_title}` : ""}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">
+                          Assegna a
+                        </label>
+                        <Select
+                          value={edit.assigned_user_id}
+                          onValueChange={(val) => updateEdit(st.id, "assigned_user_id", val)}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Seleziona utente" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(tenantUsers.data ?? []).map((u) => (
+                              <SelectItem key={u.id} value={u.id}>
+                                {u.full_name}
+                                {u.job_title ? ` \u2014 ${u.job_title}` : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">
+                          Scadenza
+                        </label>
+                        <Input
+                          type="date"
+                          value={edit.deadline_date}
+                          onChange={(e) => updateEdit(st.id, "deadline_date", e.target.value)}
+                          className="text-sm"
+                        />
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2 pt-1">
