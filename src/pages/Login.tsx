@@ -181,29 +181,6 @@ export default function Login() {
     }
   };
 
-  // ---- Magic Link handler ----
-  const handleMagicLink = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(false);
-    setLoading(true);
-
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-
-    setLoading(false);
-    if (otpError) {
-      handleError(otpError.message);
-    } else {
-      setSuccess(true);
-      setSuccessMessage("Controlla la tua email per il magic link");
-    }
-  };
-
   // ---- Forgot Password handler ----
   const handleForgotPassword = async (e: FormEvent) => {
     e.preventDefault();
