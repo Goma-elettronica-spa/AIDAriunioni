@@ -4,10 +4,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  ArrowLeft, ChevronRight, Loader2, Pencil,
+  ArrowLeft, ChevronRight, Loader2, Pencil, Trash2,
   Check, X, AlertTriangle, FileText, ListTodo, BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -195,6 +200,24 @@ export default function MeetingDetailPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("meetings")
+        .delete()
+        .eq("id", meetingId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["meetings-list"] });
+      toast({ title: "Riunione eliminata" });
+      navigate("/meetings");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
   const openEditSheet = () => {
     if (!meeting.data) return;
     const m = meeting.data;
@@ -281,6 +304,32 @@ export default function MeetingDetailPage() {
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
+              )}
+              {isAdmin && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Eliminare questa riunione?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Questa azione è irreversibile. Verranno eliminati anche tutti i dati associati (brief, task, KPI, allegati).
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Annulla</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => deleteMutation.mutate()}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        {deleteMutation.isPending ? "Eliminazione..." : "Elimina"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               )}
               {!isPast && (
                 <Badge
