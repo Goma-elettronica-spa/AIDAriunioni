@@ -70,6 +70,8 @@ export default function Login() {
   const [success, setSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [showResendConfirmation, setShowResendConfirmation] = useState(false);
+  const [resendEmail, setResendEmail] = useState("");
   const [rateLimitCountdown, setRateLimitCountdown] = useState(0);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -131,7 +133,27 @@ export default function Login() {
     } else {
       setError(translated);
     }
+    setShowResendConfirmation(false);
   }
+
+  const handleResendConfirmation = async () => {
+    if (!resendEmail) return;
+    setLoading(true);
+    setError(null);
+    const { error: resendError } = await supabase.auth.resend({
+      type: "signup",
+      email: resendEmail,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    });
+    setLoading(false);
+    if (resendError) {
+      handleError(resendError.message);
+    } else {
+      setShowResendConfirmation(false);
+      setSuccess(true);
+      setSuccessMessage("Email di conferma reinviata! Controlla la tua casella di posta.");
+    }
+  };
 
   function switchView(newView: View) {
     setView(newView);
@@ -273,7 +295,9 @@ export default function Login() {
 
     // Detect repeated signup (user already exists) — identities is empty array
     if (signUpData.user && (!signUpData.user.identities || signUpData.user.identities.length === 0)) {
-      setError("Un account con questa email esiste già. Effettua il login oppure controlla la tua casella email per il link di conferma.");
+      setResendEmail(regEmail.trim().toLowerCase());
+      setShowResendConfirmation(true);
+      setError("Un account con questa email esiste già. Effettua il login oppure reinvia l'email di conferma.");
       return;
     }
 
@@ -312,7 +336,9 @@ export default function Login() {
 
     // Detect repeated signup (user already exists)
     if (signUpData.user && (!signUpData.user.identities || signUpData.user.identities.length === 0)) {
-      setError("Un account con questa email esiste già. Effettua il login oppure controlla la tua casella email per il link di conferma.");
+      setResendEmail(regEmail.trim().toLowerCase());
+      setShowResendConfirmation(true);
+      setError("Un account con questa email esiste già. Effettua il login oppure reinvia l'email di conferma.");
       return;
     }
 
@@ -758,9 +784,26 @@ export default function Login() {
 
           {/* Error Message */}
           {error && (
-            <p className="mt-4 text-sm text-center text-destructive font-medium">
-              {error}
-            </p>
+            <div className="mt-4 space-y-2">
+              <p className="text-sm text-center text-destructive font-medium">
+                {error}
+              </p>
+              {showResendConfirmation && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={handleResendConfirmation}
+                  disabled={loading || rateLimitCountdown > 0}
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
+                  Reinvia email di conferma
+                </Button>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
