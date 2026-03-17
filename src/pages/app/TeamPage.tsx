@@ -1862,8 +1862,8 @@ export default function TeamPage() {
                     const role = (boardRoles.data ?? []).find((r) => r.id === val);
                     if (role) {
                       setInvTitle(role.name);
-                      if (role.functional_area_id && !invAreaIds.includes(role.functional_area_id)) {
-                        setInvAreaIds((prev) => [...prev, role.functional_area_id]);
+                      if (role.functional_area_id) {
+                        setInvAreaId(role.functional_area_id);
                       }
                     }
                   }}
