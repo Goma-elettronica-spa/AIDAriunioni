@@ -897,19 +897,11 @@ export default function TeamPage() {
       } as any);
       if (error) throw error;
 
-      // 3. Add functional areas — merge explicit selections with role's area
-      const allAreaIds = new Set(invAreaIds);
-      if (selectedRole?.functional_area_id) {
-        allAreaIds.add(selectedRole.functional_area_id);
-      }
-      if (allAreaIds.size > 0) {
-        const rows = Array.from(allAreaIds).map((areaId) => ({
-          user_id: placeholderId,
-          functional_area_id: areaId,
-          tenant_id: tenantId!,
-        }));
+      // 3. Add functional area (single)
+      const areaToAssign = invAreaId || selectedRole?.functional_area_id;
+      if (areaToAssign) {
         const { error: areaError } = await (supabase.from as any)("user_functional_areas")
-          .insert(rows);
+          .insert({ user_id: placeholderId, functional_area_id: areaToAssign, tenant_id: tenantId! });
         if (areaError) throw areaError;
       }
 
