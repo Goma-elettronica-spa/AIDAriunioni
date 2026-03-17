@@ -451,27 +451,15 @@ export default function Login() {
                 <Separator className="flex-1" />
               </div>
 
-              <div className="space-y-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full h-10"
-                  onClick={() => switchView("magic-link")}
-                  disabled={loading}
-                >
-                  Accedi con Magic Link
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-full h-10 text-muted-foreground"
-                  onClick={() => switchView("register")}
-                  disabled={loading}
-                >
-                  Non hai un account? Registrati
-                </Button>
-              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full h-10 text-muted-foreground"
+                onClick={() => switchView("register")}
+                disabled={loading}
+              >
+                Non hai un account? Registrati
+              </Button>
             </>
           )}
 
