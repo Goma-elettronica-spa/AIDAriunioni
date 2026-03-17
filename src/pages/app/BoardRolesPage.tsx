@@ -164,16 +164,21 @@ export default function BoardRolesPage() {
 
   // Build ordered rows: grouped by area, then "Senza Area" at end
   const tableRows = useMemo(() => {
-    const rows: { role: BoardRole; areaName: string; showArea: boolean }[] = [];
+    const rows: { role: BoardRole | null; areaName: string; areaId: string | null; showArea: boolean }[] = [];
     for (const area of areas) {
       const areaRoles = rolesByArea.get(area.id) ?? [];
-      areaRoles.forEach((role, idx) => {
-        rows.push({ role, areaName: area.name, showArea: idx === 0 });
-      });
+      if (areaRoles.length === 0) {
+        // Show area row even without roles
+        rows.push({ role: null, areaName: area.name, areaId: area.id, showArea: true });
+      } else {
+        areaRoles.forEach((role, idx) => {
+          rows.push({ role, areaName: area.name, areaId: area.id, showArea: idx === 0 });
+        });
+      }
     }
     const noAreaRoles = rolesByArea.get(null) ?? [];
     noAreaRoles.forEach((role, idx) => {
-      rows.push({ role, areaName: "Senza Area", showArea: idx === 0 });
+      rows.push({ role, areaName: "Senza Area", areaId: null, showArea: idx === 0 });
     });
     return rows;
   }, [areas, rolesByArea]);
@@ -512,12 +517,12 @@ export default function BoardRolesPage() {
               </tr>
             </thead>
             <tbody>
-              {tableRows.map((row) => {
-                const assignedUser = userByRoleId.get(row.role.id) ?? null;
-                const area = row.role.functional_area_id ? areaMap.get(row.role.functional_area_id) : null;
+              {tableRows.map((row, rowIndex) => {
+                const assignedUser = row.role ? (userByRoleId.get(row.role.id) ?? null) : null;
+                const area = row.areaId ? areaMap.get(row.areaId) : null;
 
                 return (
-                  <tr key={row.role.id} className="border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors">
+                  <tr key={row.role?.id ?? `area-${row.areaId}-${rowIndex}`} className="border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors">
                     {/* Area */}
                     <td className="py-2 px-4 align-middle">
                       {row.showArea ? (
@@ -549,17 +554,21 @@ export default function BoardRolesPage() {
 
                     {/* Role */}
                     <td className="py-2 px-4 align-middle">
-                      <div className="flex items-center gap-1.5 group">
-                        <span className="font-medium text-foreground">{row.role.name}</span>
-                        <button
-                            type="button"
-                            className="rounded p-0.5 hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => openEditRole(row.role)}
-                            title="Modifica ruolo"
-                          >
-                            <Pencil className="h-3 w-3 text-muted-foreground" />
-                          </button>
-                      </div>
+                      {row.role ? (
+                        <div className="flex items-center gap-1.5 group">
+                          <span className="font-medium text-foreground">{row.role.name}</span>
+                          <button
+                              type="button"
+                              className="rounded p-0.5 hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => openEditRole(row.role!)}
+                              title="Modifica ruolo"
+                            >
+                              <Pencil className="h-3 w-3 text-muted-foreground" />
+                            </button>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-xs italic">Nessun ruolo</span>
+                      )}
                     </td>
 
                     {/* Persona Assegnata */}
@@ -576,66 +585,68 @@ export default function BoardRolesPage() {
 
                     {/* Azioni */}
                     <td className="py-2 px-4 align-middle">
-                      <div className="flex items-center justify-end gap-2">
-                        {/* Assign / reassign dropdown */}
-                        <Select
-                          value=""
-                          onValueChange={(val) => {
-                            if (val && val !== "__cancel__") {
-                              handleAssign(row.role.id, val);
-                            }
-                          }}
-                        >
-                          <SelectTrigger className="w-40 h-7 text-xs">
-                            <SelectValue placeholder={assignedUser ? "Riassegna..." : "Assegna..."} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__cancel__">Annulla</SelectItem>
-                            {users
-                              .filter((u) => u.id !== assignedUser?.id)
-                              .map((u) => (
-                                <SelectItem key={u.id} value={u.id}>
-                                  {u.full_name}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
+                      {row.role ? (
+                        <div className="flex items-center justify-end gap-2">
+                          {/* Assign / reassign dropdown */}
+                          <Select
+                            value=""
+                            onValueChange={(val) => {
+                              if (val && val !== "__cancel__") {
+                                handleAssign(row.role!.id, val);
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="w-40 h-7 text-xs">
+                              <SelectValue placeholder={assignedUser ? "Riassegna..." : "Assegna..."} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__cancel__">Annulla</SelectItem>
+                              {users
+                                .filter((u) => u.id !== assignedUser?.id)
+                                .map((u) => (
+                                  <SelectItem key={u.id} value={u.id}>
+                                    {u.full_name}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
 
-                        {/* Edit role */}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => openEditRole(row.role)}
-                          title="Modifica ruolo"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-
-                        {/* Unassign */}
-                        {assignedUser && (
+                          {/* Edit role */}
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 text-red-600 hover:text-red-700"
-                            onClick={() => handleUnassign(assignedUser.id)}
-                            title="Rimuovi assegnazione"
+                            className="h-7 w-7"
+                            onClick={() => openEditRole(row.role!)}
+                            title="Modifica ruolo"
                           >
-                            <X className="h-3.5 w-3.5" />
+                            <Pencil className="h-3.5 w-3.5" />
                           </Button>
-                        )}
 
-                        {/* Delete role */}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => handleDeleteRole(row.role)}
-                          title="Elimina ruolo"
-                        >
+                          {/* Unassign */}
+                          {assignedUser && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={() => handleUnassign(assignedUser.id)}
+                              title="Rimuovi assegnazione"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+
+                          {/* Delete role */}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => handleDeleteRole(row.role!)}
+                            title="Elimina ruolo"
+                          >
                           <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
                         </Button>
                       </div>
+                      ) : null}
                     </td>
                   </tr>
                 );
