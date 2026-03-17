@@ -916,33 +916,19 @@ export default function TeamPage() {
     },
   });
 
-  // User invite — create auth user (sends email) then insert into users table
+  // User invite — pre-create profile in users table (no auth email sent).
+  // When the user registers independently and logs in, the system reconciles by email.
   const inviteMutation = useMutation({
     mutationFn: async () => {
       const email = invEmail.trim().toLowerCase();
+      const placeholderId = crypto.randomUUID();
 
-      // 1. Create the auth user — Supabase sends a confirmation email automatically
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password: crypto.randomUUID(), // random password, user will use magic link
-        options: {
-          data: {
-            full_name: invName.trim(),
-            invited_to: tenantName,
-            invited_by_name: user?.full_name ?? "",
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-      if (signUpError) throw signUpError;
-      if (!signUpData.user) throw new Error("Impossibile creare l'utente di autenticazione");
-
-      // 2. Resolve board role details
+      // 1. Resolve board role details
       const selectedRole = (boardRoles.data ?? []).find((r) => r.id === invBoardRoleId);
 
-      // 2b. Insert into users table with the REAL auth user id
+      // 2. Insert into users table with a placeholder id (will be reconciled on first login)
       const { error } = await supabase.from("users").insert({
-        id: signUpData.user.id,
+        id: placeholderId,
         email,
         full_name: invName.trim(),
         job_title: selectedRole ? selectedRole.name : (invTitle.trim() || null),
@@ -962,7 +948,7 @@ export default function TeamPage() {
       }
       if (allAreaIds.size > 0) {
         const rows = Array.from(allAreaIds).map((areaId) => ({
-          user_id: signUpData.user!.id,
+          user_id: placeholderId,
           functional_area_id: areaId,
           tenant_id: tenantId!,
         }));
@@ -992,8 +978,8 @@ export default function TeamPage() {
       setInvRole("dirigente");
       setInvAreaIds([]);
       toast({
-        title: "Invito inviato",
-        description: `Invito inviato a ${email}. L'utente ricevera' un'email per accedere.`,
+        title: "Utente aggiunto",
+        description: `${invName.trim()} è stato pre-registrato. Quando si registrerà e farà login, sarà riconosciuto automaticamente.`,
       });
     },
     onError: (err: Error) => {
@@ -1001,27 +987,8 @@ export default function TeamPage() {
     },
   });
 
-  // Resend invite
-  const resendInviteMutation = useMutation({
-    mutationFn: async (email: string) => {
-      const { error } = await supabase.auth.resend({
-        type: "signup",
-        email,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-      });
-      if (error) throw error;
-      return email;
-    },
-    onSuccess: (email) => {
-      toast({
-        title: "Invito reinviato",
-        description: `Un nuovo invito e' stato inviato a ${email}.`,
-      });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Errore", description: err.message, variant: "destructive" });
-    },
-  });
+  // Resend invite — no longer sends email, just shows a toast reminder
+  // Users register independently; the system reconciles by email on login
 
   // User edit
   const editMutation = useMutation({
@@ -1656,16 +1623,7 @@ export default function TeamPage() {
                       <TableCell>
                         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                           {u.invite_status === "invited" && !u.first_login_at && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => resendInviteMutation.mutate(u.email)}
-                              disabled={resendInviteMutation.isPending}
-                              title="Reinvia invito"
-                            >
-                              <Mail className="h-3.5 w-3.5" />
-                            </Button>
+                            <span className="text-xs text-muted-foreground px-2">In attesa di registrazione</span>
                           )}
                           <Button
                             variant="ghost"
