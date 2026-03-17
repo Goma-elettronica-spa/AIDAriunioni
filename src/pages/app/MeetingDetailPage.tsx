@@ -200,6 +200,24 @@ export default function MeetingDetailPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("meetings")
+        .delete()
+        .eq("id", meetingId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["meetings-list"] });
+      toast({ title: "Riunione eliminata" });
+      navigate("/meetings");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Errore", description: err.message, variant: "destructive" });
+    },
+  });
+
   const openEditSheet = () => {
     if (!meeting.data) return;
     const m = meeting.data;
