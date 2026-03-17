@@ -539,7 +539,17 @@ export default function BoardRolesPage() {
 
                     {/* Role */}
                     <td className="py-2 px-4 align-middle">
-                      <span className="font-medium text-foreground">{row.role.name}</span>
+                      <div className="flex items-center gap-1.5 group">
+                        <span className="font-medium text-foreground">{row.role.name}</span>
+                        <button
+                            type="button"
+                            className="rounded p-0.5 hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => openEditRole(row.role)}
+                            title="Modifica ruolo"
+                          >
+                            <Pencil className="h-3 w-3 text-muted-foreground" />
+                          </button>
+                      </div>
                     </td>
 
                     {/* Persona Assegnata */}
