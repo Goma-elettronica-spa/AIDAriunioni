@@ -924,7 +924,7 @@ export default function TeamPage() {
       setInvTitle("");
       setInvBoardRoleId("");
       setInvRole("dirigente");
-      setInvAreaIds([]);
+      setInvAreaId("");
       toast({
         title: "Utente aggiunto",
         description: `${invName.trim()} è stato pre-registrato. Quando si registrerà e farà login, sarà riconosciuto automaticamente.`,
