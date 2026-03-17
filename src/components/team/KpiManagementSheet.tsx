@@ -36,7 +36,7 @@ import {
 interface KpiManagementSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  areaId: string;
+  areaId: string | null;
   areaName: string;
   tenantId: string;
 }
@@ -97,16 +97,21 @@ export default function KpiManagementSheet({
   const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
 
   const kpis = useQuery({
-    queryKey: ["kpi-definitions", areaId, tenantId],
-    enabled: !!areaId && !!tenantId && open,
+    queryKey: ["kpi-definitions", areaId ?? "__company__", tenantId],
+    enabled: !!tenantId && open,
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("kpi_definitions")
         .select("*")
-        .eq("functional_area_id", areaId)
         .eq("tenant_id", tenantId)
         .eq("is_active", true)
         .order("created_at", { ascending: true });
+      if (areaId) {
+        q = q.eq("functional_area_id", areaId);
+      } else {
+        q = q.is("functional_area_id", null);
+      }
+      const { data, error } = await q;
       if (error) throw error;
       return data as KpiRow[];
     },
@@ -121,13 +126,13 @@ export default function KpiManagementSheet({
         direction: form.direction,
         target_value: form.target_value.trim() ? Number(form.target_value) : null,
         is_required: form.is_required,
-        functional_area_id: areaId,
+        functional_area_id: areaId ?? undefined,
         tenant_id: tenantId,
       });
       if (error) throw error;
     },
     onSuccess: (_data, form) => {
-      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId, tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId ?? "__company__", tenantId] });
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
       writeAuditLog({
@@ -163,7 +168,7 @@ export default function KpiManagementSheet({
       if (error) throw error;
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId, tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId ?? "__company__", tenantId] });
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
       const oldKpi = activeKpis.find((k) => k.id === variables.id);
@@ -194,7 +199,7 @@ export default function KpiManagementSheet({
       if (error) throw error;
     },
     onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId, tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId ?? "__company__", tenantId] });
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-counts", tenantId] });
       writeAuditLog({
@@ -226,7 +231,7 @@ export default function KpiManagementSheet({
       if (error) throw error;
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId, tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-definitions", areaId ?? "__company__", tenantId] });
       queryClient.invalidateQueries({ queryKey: ["kpi-all-definitions"] });
       const kpi = activeKpis.find((k) => k.id === variables.id);
       writeAuditLog({

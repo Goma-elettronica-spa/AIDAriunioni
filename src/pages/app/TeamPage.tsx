@@ -592,7 +592,7 @@ export default function TeamPage() {
   const [editRole, setEditRole] = useState("");
 
   // KPI management sheet — now area-based
-  const [kpiArea, setKpiArea] = useState<{ id: string; name: string } | null>(null);
+  const [kpiArea, setKpiArea] = useState<{ id: string | null; name: string } | null>(null);
 
   // New area inline
   const [newAreaName, setNewAreaName] = useState("");
@@ -1451,6 +1451,19 @@ export default function TeamPage() {
               <Plus className="h-3.5 w-3.5" />
             </button>
           )}
+
+          {/* Separator + KPI Aziendali button */}
+          <div className="ml-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setKpiArea({ id: null, name: "Aziendali" })}
+            >
+              <BarChart3 className="h-3 w-3 mr-1" />
+              KPI Aziendali
+            </Button>
+          </div>
         </div>
       )}
 
@@ -2106,7 +2119,7 @@ export default function TeamPage() {
       <KpiManagementSheet
         open={!!kpiArea}
         onOpenChange={(open) => !open && setKpiArea(null)}
-        areaId={kpiArea?.id ?? ""}
+        areaId={kpiArea?.id ?? null}
         areaName={kpiArea?.name ?? ""}
         tenantId={tenantId!}
       />
