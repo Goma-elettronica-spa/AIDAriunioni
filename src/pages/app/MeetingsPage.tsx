@@ -29,7 +29,7 @@ import { writeAuditLog } from "@/lib/audit";
 
 const statusConfig: Record<string, { label: string; dotClass: string; order: number }> = {
   draft: { label: "Bozza", dotClass: "bg-[hsl(var(--status-todo))]", order: 0 },
-  pre_meeting: { label: "Pre-Meeting", dotClass: "bg-[hsl(var(--status-waiting))]", order: 1 },
+  pre_meeting: { label: "Prevista", dotClass: "bg-[hsl(var(--status-waiting))]", order: 1 },
   in_progress: { label: "In Corso", dotClass: "bg-[hsl(var(--status-wip))]", order: 2 },
   completed: { label: "Conclusa", dotClass: "bg-gray-700", order: 3 },
 };
@@ -51,22 +51,18 @@ function getDisplayStatus(meeting: { status: string; scheduled_date: string; pre
   const scheduled = new Date(meeting.scheduled_date);
   scheduled.setHours(0, 0, 0, 0);
 
-  // Past meeting is always "completed" (Terminata)
-  if (scheduled < today) {
+  // Data odierna > data riunione → Conclusa
+  if (today > scheduled) {
     return "completed";
   }
 
-  // Between pre_meeting_deadline and scheduled_date → in_progress
-  if (meeting.pre_meeting_deadline) {
-    const deadline = new Date(meeting.pre_meeting_deadline);
-    deadline.setHours(0, 0, 0, 0);
-    if (today >= deadline && today <= scheduled) {
-      return "in_progress";
-    }
+  // Data odierna = data riunione → In Corso
+  if (today.getTime() === scheduled.getTime()) {
+    return "in_progress";
   }
 
-  // Before pre_meeting_deadline → use stored status
-  return meeting.status;
+  // Data odierna < data riunione → Prevista
+  return "pre_meeting";
 }
 
 export default function MeetingsPage() {
