@@ -1298,7 +1298,7 @@ export type Database = {
           {
             foreignKeyName: "user_functional_areas_functional_area_id_fkey"
             columns: ["functional_area_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "functional_areas"
             referencedColumns: ["id"]
           },
