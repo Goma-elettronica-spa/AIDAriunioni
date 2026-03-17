@@ -406,16 +406,25 @@ export default function BoardRolesPage() {
     setRoleDialogOpen(true);
   };
 
+  const [areaDeps, setAreaDeps] = useState<{ kpis: number; roles: number }>({ kpis: 0, roles: 0 });
+  const [roleDeps, setRoleDeps] = useState<{ hasUser: boolean; userName: string }>({ hasUser: false, userName: "" });
+
   const handleDeleteArea = async (area: FunctionalArea) => {
     try {
-      // Check how many KPIs reference this area
-      const { count, error } = await supabase
-        .from("kpi_definitions")
-        .select("id", { count: "exact", head: true })
-        .eq("functional_area_id", area.id);
-      if (error) throw error;
+      const [kpiRes, roleRes] = await Promise.all([
+        supabase
+          .from("kpi_definitions")
+          .select("id", { count: "exact", head: true })
+          .eq("functional_area_id", area.id),
+        (supabase.from as any)("board_roles")
+          .select("id", { count: "exact", head: true })
+          .eq("functional_area_id", area.id),
+      ]);
+      const kpiCount = kpiRes.count ?? 0;
+      const roleCount = roleRes.count ?? 0;
       setAreaToDelete(area);
-      setAreaKpiCount(count ?? 0);
+      setAreaKpiCount(kpiCount);
+      setAreaDeps({ kpis: kpiCount, roles: roleCount });
       setAreaDeleteConfirmOpen(true);
     } catch (err: any) {
       toast({ title: "Errore", description: err.message, variant: "destructive" });
@@ -423,6 +432,8 @@ export default function BoardRolesPage() {
   };
 
   const handleDeleteRole = (role: BoardRole) => {
+    const assigned = userByRoleId.get(role.id);
+    setRoleDeps({ hasUser: !!assigned, userName: assigned?.full_name ?? "" });
     setRoleToDelete(role);
     setDeleteConfirmOpen(true);
   };
