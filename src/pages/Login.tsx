@@ -10,13 +10,11 @@ import { Loader2, Eye, EyeOff, ArrowLeft, Search } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
-type View = "login" | "register" | "magic-link" | "forgot-password";
+type View = "login" | "register" | "forgot-password";
 
 function translateError(message: string): string {
-  if (message.includes("Email rate limit exceeded")) {
-    return "rate_limit";
-  }
-  if (message.includes("Too many requests")) {
+  const lower = message.toLowerCase();
+  if (lower.includes("email rate limit exceeded") || lower.includes("rate limit") || lower.includes("too many requests")) {
     return "rate_limit";
   }
   if (message.includes("Invalid login credentials")) {
@@ -183,29 +181,6 @@ export default function Login() {
     }
   };
 
-  // ---- Magic Link handler ----
-  const handleMagicLink = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(false);
-    setLoading(true);
-
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-
-    setLoading(false);
-    if (otpError) {
-      handleError(otpError.message);
-    } else {
-      setSuccess(true);
-      setSuccessMessage("Controlla la tua email per il magic link");
-    }
-  };
-
   // ---- Forgot Password handler ----
   const handleForgotPassword = async (e: FormEvent) => {
     e.preventDefault();
@@ -354,9 +329,7 @@ export default function Login() {
         ? regStep === 1
           ? "Crea il tuo account"
           : "Scegli la tua organizzazione"
-        : view === "magic-link"
-          ? "Ricevi un link di accesso via email"
-          : "Inserisci la tua email per reimpostare la password";
+        : "Inserisci la tua email per reimpostare la password";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -455,27 +428,15 @@ export default function Login() {
                 <Separator className="flex-1" />
               </div>
 
-              <div className="space-y-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full h-10"
-                  onClick={() => switchView("magic-link")}
-                  disabled={loading}
-                >
-                  Accedi con Magic Link
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-full h-10 text-muted-foreground"
-                  onClick={() => switchView("register")}
-                  disabled={loading}
-                >
-                  Non hai un account? Registrati
-                </Button>
-              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full h-10 text-muted-foreground"
+                onClick={() => switchView("register")}
+                disabled={loading}
+              >
+                Non hai un account? Registrati
+              </Button>
             </>
           )}
 
@@ -744,35 +705,6 @@ export default function Login() {
             </div>
           )}
 
-          {/* ==================== MAGIC LINK VIEW ==================== */}
-          {view === "magic-link" && (
-            <form onSubmit={handleMagicLink} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="magic-email">Email</Label>
-                <Input
-                  id="magic-email"
-                  type="email"
-                  placeholder="email@azienda.it"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={loading}
-                  className="h-10"
-                />
-              </div>
-              <Button
-                type="submit"
-                className="w-full h-10"
-                disabled={loading || !email.trim()}
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Invia Magic Link"
-                )}
-              </Button>
-            </form>
-          )}
 
           {/* ==================== FORGOT PASSWORD VIEW ==================== */}
           {view === "forgot-password" && (
