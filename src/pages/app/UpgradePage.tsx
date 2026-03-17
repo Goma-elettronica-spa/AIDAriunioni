@@ -80,10 +80,10 @@ type UpgradeCard = UpgradeRequest & {
 const columns = [
   { id: "proposed", label: "Proposed", color: "#7C3AED" },
   { id: "todo", label: "To Do", color: "var(--status-todo)" },
+  { id: "waiting_for", label: "Waiting For", color: "var(--status-waiting)" },
   { id: "wip", label: "Work in Progress", color: "var(--status-wip)" },
   { id: "done", label: "Done", color: "var(--status-done)" },
   { id: "stuck", label: "Stuck", color: "var(--status-stuck)" },
-  { id: "waiting_for", label: "Waiting For", color: "var(--status-waiting)" },
   { id: "rejected", label: "Rejected", color: "#991B1B" },
 ];
 
