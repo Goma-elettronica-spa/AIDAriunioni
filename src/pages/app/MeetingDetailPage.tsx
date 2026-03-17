@@ -27,7 +27,7 @@ import { KpiTab } from "@/components/meeting-detail/KpiTab";
 
 const statusConfig: Record<string, { label: string; dotClass: string }> = {
   draft: { label: "Bozza", dotClass: "bg-[hsl(var(--status-todo))]" },
-  pre_meeting: { label: "Pre-Meeting", dotClass: "bg-[hsl(var(--status-waiting))]" },
+  pre_meeting: { label: "Prevista", dotClass: "bg-[hsl(var(--status-waiting))]" },
   in_progress: { label: "In Corso", dotClass: "bg-[hsl(var(--status-wip))]" },
   completed: { label: "Conclusa", dotClass: "bg-gray-700" },
 };
@@ -227,8 +227,9 @@ export default function MeetingDetailPage() {
   today.setHours(0, 0, 0, 0);
   const scheduled = new Date(m.scheduled_date);
   scheduled.setHours(0, 0, 0, 0);
+  const isToday = today.getTime() === scheduled.getTime();
   const isPast = today > scheduled;
-  const displayStatus = isPast ? "completed" : m.status;
+  const displayStatus = isPast ? "completed" : isToday ? "in_progress" : "pre_meeting";
   const sc = statusConfig[displayStatus] ?? statusConfig.draft;
   const nextIdx = statusFlow.indexOf(m.status) + 1;
   const nextStatus = nextIdx < statusFlow.length ? statusFlow[nextIdx] : null;
