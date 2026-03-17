@@ -203,33 +203,46 @@ export function TasksTab({ meetingId, tenantId, isAdmin, transcriptUrl, summaryT
   }, [triggerGenerate]);
 
   const getTranscriptText = async (): Promise<string> => {
-    let transcriptText = "";
-
     if (transcriptUrl) {
-      const ext = transcriptUrl.toLowerCase();
-      if (ext.endsWith(".txt") || ext.endsWith(".md")) {
-        try {
-          const r = await fetch(transcriptUrl);
-          transcriptText = await r.text();
-        } catch {
-          // fall through to summary_text
+      try {
+        const r = await fetch(transcriptUrl);
+        if (r.ok) {
+          const contentType = r.headers.get("content-type") ?? "";
+          if (!contentType.includes("application/pdf") && !contentType.includes("application/zip")) {
+            const text = await r.text();
+            if (text && text.trim().length > 10) {
+              return text;
+            }
+          }
         }
+      } catch {
+        // fall through to summary_text
       }
     }
 
-    if (!transcriptText && summaryText) {
-      transcriptText = summaryText;
+    if (summaryText && summaryText.trim().length > 10) {
+      return summaryText;
     }
 
-    return transcriptText;
+    return "";
   };
 
   const generateSuggestedTasks = async () => {
+    if (!transcriptUrl && !summaryText) {
+      toast({
+        title: "Trascrizione mancante",
+        description: "Carica prima una trascrizione nella tab Materiale per permettere a Claudietto di analizzarla.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const transcriptText = await getTranscriptText();
 
     if (!transcriptText) {
       toast({
-        title: "Nessuna trascrizione o riassunto disponibile per l'analisi",
+        title: "Impossibile leggere la trascrizione",
+        description: "Il file di trascrizione non è leggibile. Carica un file .txt o .md nella tab Materiale.",
         variant: "destructive",
       });
       return;
