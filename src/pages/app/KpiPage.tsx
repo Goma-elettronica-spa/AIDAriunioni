@@ -871,6 +871,7 @@ function AllUsersKpiSection({ tenantId }: { tenantId: string }) {
               name: d.name,
               description: d.description,
               unit: d.unit,
+              targetValue: (d as any).target_value ?? null,
               latest,
               sparkValues,
               areaName: areaMap.get(areaId) ?? "",
