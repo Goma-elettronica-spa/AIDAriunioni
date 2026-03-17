@@ -227,8 +227,9 @@ export default function MeetingDetailPage() {
   today.setHours(0, 0, 0, 0);
   const scheduled = new Date(m.scheduled_date);
   scheduled.setHours(0, 0, 0, 0);
+  const isToday = today.getTime() === scheduled.getTime();
   const isPast = today > scheduled;
-  const displayStatus = isPast ? "completed" : m.status;
+  const displayStatus = isPast ? "completed" : isToday ? "in_progress" : "pre_meeting";
   const sc = statusConfig[displayStatus] ?? statusConfig.draft;
   const nextIdx = statusFlow.indexOf(m.status) + 1;
   const nextStatus = nextIdx < statusFlow.length ? statusFlow[nextIdx] : null;
