@@ -352,9 +352,7 @@ export default function Login() {
         ? regStep === 1
           ? "Crea il tuo account"
           : "Scegli la tua organizzazione"
-        : view === "magic-link"
-          ? "Ricevi un link di accesso via email"
-          : "Inserisci la tua email per reimpostare la password";
+        : "Inserisci la tua email per reimpostare la password";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
