@@ -590,7 +590,28 @@ export function OverviewTab({ meeting, isAdmin }: Props) {
                             ))}
                           </div>
                         ) : (
-                          <span className="text-muted-foreground text-sm">(nessun allegato)</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground text-sm">(nessun allegato)</span>
+                            {isAdmin && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-xs px-2"
+                                disabled={uploadingForUser === u.userId}
+                                onClick={() => {
+                                  pendingUploadUserId.current = u.userId;
+                                  uploadInputRef.current?.click();
+                                }}
+                              >
+                                {uploadingForUser === u.userId ? (
+                                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                ) : (
+                                  <Upload className="h-3 w-3 mr-1" />
+                                )}
+                                Carica
+                              </Button>
+                            )}
+                          </div>
                         )}
                       </div>
                     ))}
