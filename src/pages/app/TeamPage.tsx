@@ -2119,6 +2119,101 @@ export default function TeamPage() {
         </DialogContent>
       </Dialog>
 
+      {/* KPI Aziendali Section */}
+      {isOrgAdmin && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-foreground">KPI Aziendali</h2>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setKpiArea({ id: null, name: "Aziendali" })}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Aggiungi KPI
+            </Button>
+          </div>
+          {companyKpis.isLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : !companyKpis.data?.length ? (
+            <div className="border border-dashed border-border rounded-lg p-8 text-center">
+              <BarChart3 className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground">
+                Nessun KPI aziendale definito. Aggiungi il primo KPI per monitorare le metriche aziendali.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => setKpiArea({ id: null, name: "Aziendali" })}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Aggiungi KPI
+              </Button>
+            </div>
+          ) : (
+            <div className="border border-border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Unità</TableHead>
+                    <TableHead>Direzione</TableHead>
+                    <TableHead>Target</TableHead>
+                    <TableHead>Obbligatorio</TableHead>
+                    <TableHead className="w-[80px]">Azioni</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {companyKpis.data.map((kpi) => (
+                    <TableRow key={kpi.id}>
+                      <TableCell>
+                        <div>
+                          <span className="font-medium text-sm">{kpi.name}</span>
+                          {kpi.description && (
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{kpi.description}</p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">{kpi.unit}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {kpi.direction === "up_is_good" ? (
+                          <span className="inline-flex items-center gap-1 text-xs"><ArrowUp className="h-3.5 w-3.5 text-green-600" /> Crescita</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs"><ArrowDown className="h-3.5 w-3.5 text-green-600" /> Calo</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {kpi.target_value != null
+                          ? new Intl.NumberFormat("it-IT").format(kpi.target_value) + " " + kpi.unit
+                          : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={kpi.is_required ? "default" : "secondary"} className="text-xs">
+                          {kpi.is_required ? "Sì" : "No"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => setKpiArea({ id: null, name: "Aziendali" })}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* KPI Management Sheet — now area-based */}
       <KpiManagementSheet
         open={!!kpiArea}
