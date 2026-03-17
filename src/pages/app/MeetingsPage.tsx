@@ -442,6 +442,7 @@ export default function MeetingsPage() {
                   )}
                 </SelectContent>
               </Select>
+            </div>
 
             <div className="space-y-2">
               <Label>Deadline Pre-Meeting</Label>
