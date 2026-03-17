@@ -109,9 +109,9 @@ export default function AppLayout() {
   );
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="h-screen flex bg-background overflow-hidden">
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex md:w-60 md:flex-col md:fixed md:inset-y-0 z-30">
+      <aside className="hidden md:flex md:w-60 md:flex-col md:shrink-0 z-30">
         {sidebar}
       </aside>
 
@@ -127,9 +127,9 @@ export default function AppLayout() {
       )}
 
       {/* Main */}
-      <div className="flex-1 md:ml-60 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col min-w-0 h-screen">
         {/* Top bar */}
-        <header className="h-14 border-b border-border flex items-center px-4 md:px-6 bg-background sticky top-0 z-20">
+        <header className="h-14 shrink-0 border-b border-border flex items-center px-4 md:px-6 bg-background z-20">
           <Button
             variant="ghost"
             size="icon"
@@ -149,7 +149,7 @@ export default function AppLayout() {
         </header>
 
         {/* Content */}
-        <main className="flex-1 p-6 md:p-8">
+        <main className="flex-1 overflow-auto p-6 md:p-8">
           <Outlet />
         </main>
       </div>
