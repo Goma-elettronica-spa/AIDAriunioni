@@ -345,6 +345,7 @@ function MiniKpiCard({
     unit: string;
     latest: any;
     sparkValues: number[];
+    historyEntries?: KpiEntryWithMeeting[];
     areaName?: string;
     targetValue?: number | null;
   };
