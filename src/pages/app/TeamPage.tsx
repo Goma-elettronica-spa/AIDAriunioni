@@ -592,7 +592,7 @@ export default function TeamPage() {
   const [editRole, setEditRole] = useState("");
 
   // KPI management sheet — now area-based
-  const [kpiArea, setKpiArea] = useState<{ id: string; name: string } | null>(null);
+  const [kpiArea, setKpiArea] = useState<{ id: string | null; name: string } | null>(null);
 
   // New area inline
   const [newAreaName, setNewAreaName] = useState("");
