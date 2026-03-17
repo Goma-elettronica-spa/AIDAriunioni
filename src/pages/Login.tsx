@@ -10,7 +10,7 @@ import { Loader2, Eye, EyeOff, ArrowLeft, Search } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
-type View = "login" | "register" | "magic-link" | "forgot-password";
+type View = "login" | "register" | "forgot-password";
 
 function translateError(message: string): string {
   if (message.includes("Email rate limit exceeded")) {
