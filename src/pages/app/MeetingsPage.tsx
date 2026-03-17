@@ -424,12 +424,24 @@ export default function MeetingsPage() {
                   />
                 </PopoverContent>
               </Popover>
-              {scheduledDate && (
-                <p className="text-xs text-muted-foreground">
-                  Trimestre: {getQuarter(scheduledDate)}
-                </p>
-              )}
             </div>
+
+            <div className="space-y-2">
+              <Label>Trimestre</Label>
+              <Select value={selectedQuarter} onValueChange={setSelectedQuarter}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[currentYear - 1, currentYear, currentYear + 1].flatMap((y) =>
+                    [1, 2, 3, 4].map((q) => (
+                      <SelectItem key={`Q${q}-${y}`} value={`Q${q}-${y}`}>
+                        Q{q}-{y}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
 
             <div className="space-y-2">
               <Label>Deadline Pre-Meeting</Label>
