@@ -322,10 +322,7 @@ export function AttachmentsTab({ meeting }: Props) {
                 <label className="text-xs font-medium text-muted-foreground">Area Funzionale</label>
                 <Select
                   value={selectedAreaId}
-                  onValueChange={(val) => {
-                    setSelectedAreaId(val);
-                    setSelectedUserId("");
-                  }}
+                  onValueChange={setSelectedAreaId}
                 >
                   <SelectTrigger className="h-8 text-xs w-[200px]">
                     <SelectValue placeholder="Seleziona area..." />
@@ -340,33 +337,22 @@ export function AttachmentsTab({ meeting }: Props) {
                 </Select>
               </div>
 
-              <div className="space-y-1.5 min-w-[180px]">
-                <label className="text-xs font-medium text-muted-foreground">Persona</label>
-                <Select
-                  value={selectedUserId}
-                  onValueChange={setSelectedUserId}
-                  disabled={!selectedAreaId}
-                >
-                  <SelectTrigger className="h-8 text-xs w-[200px]">
-                    <SelectValue placeholder={selectedAreaId ? "Seleziona persona..." : "Prima seleziona l'area"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredUsersForUpload.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.full_name}
-                      </SelectItem>
-                    ))}
-                    {filteredUsersForUpload.length === 0 && selectedAreaId && (
-                      <div className="px-2 py-1.5 text-xs text-muted-foreground">Nessun utente in questa area</div>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
+              {selectedAreaId && (
+                <div className="flex items-center text-xs text-muted-foreground h-8">
+                  {userInSelectedArea.isLoading ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : resolvedUserName ? (
+                    <span>→ {resolvedUserName}</span>
+                  ) : (
+                    <span className="text-destructive">Nessun utente assegnato a questa area</span>
+                  )}
+                </div>
+              )}
 
               <Button
                 size="sm"
                 className="h-8"
-                disabled={!selectedUserId || !selectedAreaId || uploading}
+                disabled={!effectiveUserId || !selectedAreaId || uploading}
                 onClick={() => inputRef.current?.click()}
               >
                 {uploading ? (
