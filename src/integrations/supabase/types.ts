@@ -1051,6 +1051,8 @@ export type Database = {
       }
       upgrade_requests: {
         Row: {
+          attachment_name: string | null
+          attachment_url: string | null
           created_at: string
           created_by_user_id: string
           description: string | null
@@ -1073,6 +1075,8 @@ export type Database = {
           value_unit: string
         }
         Insert: {
+          attachment_name?: string | null
+          attachment_url?: string | null
           created_at?: string
           created_by_user_id: string
           description?: string | null
@@ -1095,6 +1099,8 @@ export type Database = {
           value_unit: string
         }
         Update: {
+          attachment_name?: string | null
+          attachment_url?: string | null
           created_at?: string
           created_by_user_id?: string
           description?: string | null
