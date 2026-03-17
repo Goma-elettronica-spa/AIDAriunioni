@@ -133,7 +133,27 @@ export default function Login() {
     } else {
       setError(translated);
     }
+    setShowResendConfirmation(false);
   }
+
+  const handleResendConfirmation = async () => {
+    if (!resendEmail) return;
+    setLoading(true);
+    setError(null);
+    const { error: resendError } = await supabase.auth.resend({
+      type: "signup",
+      email: resendEmail,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    });
+    setLoading(false);
+    if (resendError) {
+      handleError(resendError.message);
+    } else {
+      setShowResendConfirmation(false);
+      setSuccess(true);
+      setSuccessMessage("Email di conferma reinviata! Controlla la tua casella di posta.");
+    }
+  };
 
   function switchView(newView: View) {
     setView(newView);
