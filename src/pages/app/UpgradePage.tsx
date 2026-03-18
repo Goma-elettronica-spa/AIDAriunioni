@@ -582,6 +582,7 @@ export default function UpgradePage() {
         value_amount: parseFloat(newValueAmount) || 0,
         status: "proposed",
         position: 0,
+        source: "manual",
       }).select("id").single();
       if (error) throw error;
 
