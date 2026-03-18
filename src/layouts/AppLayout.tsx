@@ -12,6 +12,7 @@ import {
   TrendingUp,
   Network,
   Lightbulb,
+  LifeBuoy,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ const allNavItems = [
   { title: "Team", url: "/team", icon: Users, roles: ["org_admin"] as string[] },
   { title: "Organizational Chart", url: "/board-roles", icon: Network, roles: ["org_admin"] as string[] },
   { title: "Audit Log", url: "/audit-log", icon: ShieldCheck, roles: ["org_admin", "information_officer"] as string[] },
+  { title: "Support", url: "/support", icon: LifeBuoy, roles: null },
 ];
 
 const roleLabels: Record<string, string> = {
