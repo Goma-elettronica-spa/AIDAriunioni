@@ -15,7 +15,7 @@ import {
 import { useDroppable } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Lightbulb, TrendingUp, Scissors, Link2, Download, Trash2, Upload, FileDown, X as XIcon } from "lucide-react";
+import { Lightbulb, TrendingUp, Scissors, Link2, Download, Trash2, Upload, FileDown, X as XIcon, Sparkles, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -68,6 +68,7 @@ type UpgradeRequest = {
   updated_at: string;
   attachment_url: string | null;
   attachment_name: string | null;
+  source: string;
 };
 
 type UpgradeCard = UpgradeRequest & {
@@ -191,6 +192,19 @@ function UpgradeCardComponent({
 
       {/* Meta row */}
       <div className="flex items-center gap-2 flex-wrap">
+        {/* Source: AI / Manuale */}
+        {card.source === "ai_suggested" ? (
+          <Badge variant="outline" className="inline-flex items-center text-[10px] font-normal gap-1 py-0 bg-violet-50 text-violet-700 border-violet-200">
+            <Sparkles className="h-2.5 w-2.5" />
+            AI
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="inline-flex items-center text-[10px] font-normal gap-1 py-0 bg-gray-50 text-gray-600 border-gray-200">
+            <User className="h-2.5 w-2.5" />
+            Manuale
+          </Badge>
+        )}
+
         {/* KPI collegata */}
         {card.kpi_name && (
           <Badge variant="secondary" className="inline-flex items-center text-[10px] font-normal gap-1 py-0">
@@ -217,28 +231,6 @@ function UpgradeCardComponent({
             Cost Cutting
           </Badge>
         )}
-      </div>
-
-      {/* Valore aggiunto — always show value with unit badge */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {hasReview ? (
-          <div className="space-y-0.5">
-            <p className="text-xs text-muted-foreground line-through">
-              {formatValue(card.value_amount, card.value_unit)}
-            </p>
-            <p className="text-xs font-bold text-foreground">
-              {formatValue(card.reviewed_value_amount!, card.reviewed_value_unit ?? card.value_unit)}{" "}
-              <span className="font-normal text-muted-foreground">(rivisto)</span>
-            </p>
-          </div>
-        ) : (
-          <p className="text-xs font-semibold text-foreground">
-            {formatValue(card.value_amount, card.value_unit)}
-          </p>
-        )}
-        <Badge variant="outline" className="inline-flex items-center text-[10px] font-normal py-0 bg-muted/50">
-          {getUnitLabel(hasReview ? (card.reviewed_value_unit ?? card.value_unit) : card.value_unit, unitOptions)}
-        </Badge>
       </div>
 
       {/* Description */}
@@ -364,7 +356,7 @@ export default function UpgradePage() {
     queryFn: async () => {
       const { data, error } = await (supabase.from as any)("upgrade_requests")
         .select(
-          "id, tenant_id, meeting_id, created_by_user_id, owner_user_id, title, description, linked_kpi_id, reason_why, value_unit, value_amount, reviewed_value_unit, reviewed_value_amount, reviewed_by, reviewed_at, review_note, status, position, created_at, updated_at, attachment_url, attachment_name"
+          "id, tenant_id, meeting_id, created_by_user_id, owner_user_id, title, description, linked_kpi_id, reason_why, value_unit, value_amount, reviewed_value_unit, reviewed_value_amount, reviewed_by, reviewed_at, review_note, status, position, created_at, updated_at, attachment_url, attachment_name, source"
         )
         .eq("tenant_id", tenantId!);
       if (error) throw error;
@@ -590,6 +582,7 @@ export default function UpgradePage() {
         value_amount: parseFloat(newValueAmount) || 0,
         status: "proposed",
         position: 0,
+        source: "manual",
       }).select("id").single();
       if (error) throw error;
 

@@ -298,6 +298,7 @@ export function UpgradeTab({ meetingId, tenantId, isAdmin, summaryText, transcri
           linked_kpi_id: linkedKpiId,
           status: "proposed",
           position: 0,
+          source: "ai_suggested",
         };
       });
 
