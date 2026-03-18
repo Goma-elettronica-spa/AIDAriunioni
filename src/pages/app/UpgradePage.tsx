@@ -68,6 +68,7 @@ type UpgradeRequest = {
   updated_at: string;
   attachment_url: string | null;
   attachment_name: string | null;
+  source: string;
 };
 
 type UpgradeCard = UpgradeRequest & {
