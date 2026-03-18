@@ -68,7 +68,7 @@ export default function AuthCallback() {
       }
     }
 
-    // 2. Track first login — update first_login_at and invite_status
+    // 2. Track first login -- update first_login_at and invite_status
     if (profile && !profile.first_login_at) {
       await supabase
         .from("users")
@@ -77,7 +77,6 @@ export default function AuthCallback() {
           invite_status: "active",
         } as any)
         .eq("id", session.user.id);
-      // Update local profile reference
       profile = { ...profile, first_login_at: new Date().toISOString(), invite_status: "active" };
     }
 
@@ -91,7 +90,7 @@ export default function AuthCallback() {
       return;
     }
 
-    // 3. If no profile yet and we have registration metadata, handle it now
+    // 4. If no profile yet and we have registration metadata, handle it now
     if (!profile && registrationType === "create_org") {
       const fullName = (meta.full_name as string) || "";
       const tenantName = (meta.tenant_name as string) || "";
@@ -139,7 +138,7 @@ export default function AuthCallback() {
       return;
     }
 
-    // 4. Profile exists but no tenant_id — check for pending join requests
+    // 5. Profile exists but no tenant_id -- check for pending join requests
     if (profile && !profile.tenant_id) {
       const { data: joinReq } = await supabase
         .from("join_requests")
@@ -156,7 +155,7 @@ export default function AuthCallback() {
       return;
     }
 
-    // 5. No profile, no metadata — generic waiting message
+    // 6. No profile, no metadata -- generic waiting message
     if (!profile) {
       const { data: joinReq } = await supabase
         .from("join_requests")
