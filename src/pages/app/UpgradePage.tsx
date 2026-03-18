@@ -185,9 +185,7 @@ function UpgradeCardComponent({
         >
           {initials}
         </div>
-        <Badge variant="secondary" className="inline-flex items-center text-[10px] font-normal py-0">
-          {card.owner_name}
-        </Badge>
+        <span className="text-xs text-muted-foreground truncate">{card.owner_name}</span>
       </div>
 
       {/* Meta row */}
