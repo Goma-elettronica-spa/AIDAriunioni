@@ -35,7 +35,7 @@ const allNavItems = [
 const roleLabels: Record<string, string> = {
   org_admin: "Admin",
   information_officer: "Info Officer",
-  dirigente: "Dirigente",
+  dirigente: "User",
 };
 
 export default function AppLayout() {

@@ -180,7 +180,14 @@ export default function AuditLogPage() {
 
       const { data, error, count } = await query;
       if (error) throw error;
-      return { rows: data ?? [], total: count ?? 0 };
+
+      // Also fetch unfiltered total count for debug info
+      const { count: totalUnfiltered } = await supabase
+        .from("audit_logs")
+        .select("*", { count: "exact", head: true })
+        .eq("tenant_id", tenantId!);
+
+      return { rows: data ?? [], total: count ?? 0, totalUnfiltered: totalUnfiltered ?? 0 };
     },
   });
 
@@ -284,8 +291,18 @@ export default function AuditLogPage() {
       {/* Table */}
       {logsQuery.isLoading ? (
         <Skeleton className="h-60 w-full" />
+      ) : logsQuery.isError ? (
+        <div className="text-center py-12 space-y-2">
+          <p className="text-sm text-destructive font-medium">Errore nel caricamento dei log</p>
+          <p className="text-xs text-muted-foreground">{(logsQuery.error as Error)?.message ?? "Errore sconosciuto"}</p>
+        </div>
       ) : !logsQuery.data?.rows.length ? (
-        <p className="text-sm text-muted-foreground text-center py-12">Nessun log trovato.</p>
+        <div className="text-center py-12 space-y-2">
+          <p className="text-sm text-muted-foreground">Nessun log trovato per i filtri selezionati.</p>
+          {(logsQuery.data?.totalUnfiltered ?? 0) > 0 && (
+            <p className="text-xs text-muted-foreground">Totale log nel sistema: {logsQuery.data?.totalUnfiltered}</p>
+          )}
+        </div>
       ) : (
         <>
           <div className="border border-border rounded-lg overflow-hidden">

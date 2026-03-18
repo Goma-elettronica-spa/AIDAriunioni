@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   UserPlus, Pencil, Power, Check, X, BarChart3, ChevronDown, ChevronRight,
   Plus, EyeOff, Mail, CheckCircle, Clock, TrendingUp, TrendingDown,
-  ArrowUp, ArrowDown,
+  ArrowUp, ArrowDown, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,9 @@ import { toast } from "@/hooks/use-toast";
 import { writeAuditLog } from "@/lib/audit";
 import KpiManagementSheet from "@/components/team/KpiManagementSheet";
 import { Link } from "react-router-dom";
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -110,79 +113,39 @@ type JoinRequest = {
 };
 
 const roleConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline"; className?: string }> = {
-  org_admin: { label: "Org Admin", variant: "default", className: "bg-black text-white hover:bg-black/90" },
-  information_officer: { label: "Info Officer", variant: "default", className: "bg-blue-600 text-white hover:bg-blue-700" },
-  dirigente: { label: "Dirigente", variant: "secondary" },
+  org_admin: { label: "Admin", variant: "default", className: "bg-black text-white hover:bg-black/90" },
+  information_officer: { label: "Info Officer", variant: "outline" },
+  dirigente: { label: "User", variant: "secondary" },
 };
 
 // ── Helper components ────────────────────────────────────────────────────────
 
-function InviteStatusBadge({
-  user: u,
-  inviterName,
-}: {
-  user: UserRow;
-  inviterName?: string;
-}) {
-  let badge: JSX.Element;
+function StatusDot({ user: u }: { user: UserRow }) {
+  let color: string;
+  let tooltip: string;
 
   if (!u.is_active) {
-    badge = (
-      <Badge variant="outline" className="inline-flex items-center gap-1 text-xs bg-red-50 text-red-700 border-red-200">
-        <X className="h-3 w-3" />
-        Disattivato
-      </Badge>
-    );
-  } else if (u.invite_status === "invited" && !u.first_login_at) {
-    badge = (
-      <Badge variant="outline" className="inline-flex items-center gap-1 text-xs bg-orange-50 text-orange-700 border-orange-200">
-        <Mail className="h-3 w-3" />
-        Invitato
-      </Badge>
-    );
-  } else if (u.invite_status === "active" && u.first_login_at) {
-    badge = (
-      <Badge variant="outline" className="inline-flex items-center gap-1 text-xs bg-green-50 text-green-700 border-green-200">
-        <CheckCircle className="h-3 w-3" />
-        Attivo
-      </Badge>
-    );
-  } else if (u.invite_status === "active" && !u.first_login_at) {
-    badge = (
-      <Badge variant="outline" className="inline-flex items-center gap-1 text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
-        <Clock className="h-3 w-3" />
-        In attesa
-      </Badge>
-    );
+    color = "bg-red-500";
+    tooltip = "Disattivato";
+  } else if (u.first_login_at) {
+    color = "bg-green-500";
+    tooltip = `Primo accesso: ${new Date(u.first_login_at).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" })}`;
   } else {
-    // fallback based on is_active
-    badge = u.is_active ? (
-      <Badge variant="outline" className="inline-flex items-center gap-1 text-xs bg-green-50 text-green-700 border-green-200">
-        <CheckCircle className="h-3 w-3" />
-        Attivo
-      </Badge>
-    ) : (
-      <Badge variant="outline" className="inline-flex items-center gap-1 text-xs bg-red-50 text-red-700 border-red-200">
-        <X className="h-3 w-3" />
-        Disattivato
-      </Badge>
-    );
+    color = "bg-gray-400";
+    tooltip = "Mai acceduto";
   }
 
   return (
-    <div className="flex flex-col gap-0.5">
-      {badge}
-      {u.invited_by && u.invited_at && (
-        <span className="text-[10px] text-muted-foreground">
-          Invitato{inviterName ? ` da ${inviterName}` : ""} il{" "}
-          {new Date(u.invited_at).toLocaleDateString("it-IT", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric",
-          })}
-        </span>
-      )}
-    </div>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={`inline-block h-2.5 w-2.5 rounded-full ${color}`} />
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          <p className="text-xs">{tooltip}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -1383,6 +1346,31 @@ export default function TeamPage() {
         </div>
       )}
 
+      {/* Warning: areas without referents */}
+      {isOrgAdmin && areas.length > 0 && (() => {
+        const orphanAreas = areas.filter((area) => {
+          const hasUsers = (userFunctionalAreas.data ?? []).some(
+            (ufa) => ufa.functional_area_id === area.id
+          );
+          return !hasUsers;
+        });
+        if (orphanAreas.length === 0) return null;
+        return (
+          <div className="flex items-center flex-wrap gap-2">
+            {orphanAreas.map((area) => (
+              <Badge
+                key={area.id}
+                variant="outline"
+                className="inline-flex items-center gap-1.5 text-xs border-red-300 text-red-700 bg-red-50"
+              >
+                <AlertTriangle className="h-3 w-3" />
+                {area.name} — nessun referente
+              </Badge>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <Select value={areaFilter} onValueChange={setAreaFilter}>
@@ -1403,9 +1391,9 @@ export default function TeamPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tutti i permessi</SelectItem>
-            <SelectItem value="org_admin">Org Admin</SelectItem>
+            <SelectItem value="org_admin">Admin</SelectItem>
             <SelectItem value="information_officer">Info Officer</SelectItem>
-            <SelectItem value="dirigente">Dirigente</SelectItem>
+            <SelectItem value="dirigente">User</SelectItem>
           </SelectContent>
         </Select>
 
@@ -1519,9 +1507,8 @@ export default function TeamPage() {
                               </Badge>
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="org_admin">Org Admin</SelectItem>
-                              <SelectItem value="information_officer">Info Officer</SelectItem>
-                              <SelectItem value="dirigente">Dirigente</SelectItem>
+                              <SelectItem value="org_admin">Admin</SelectItem>
+                              <SelectItem value="dirigente">User</SelectItem>
                             </SelectContent>
                           </Select>
                         ) : (
@@ -1549,7 +1536,15 @@ export default function TeamPage() {
                       <TableCell>
                         <Badge
                           variant="outline"
-                          className="inline-flex items-center text-xs cursor-pointer"
+                          className={`inline-flex items-center text-xs cursor-pointer ${
+                            userKpiCount === 0
+                              ? "bg-red-100 text-red-700 border-red-200"
+                              : userKpiCount >= 1 && userKpiCount <= 2
+                              ? "bg-yellow-100 text-yellow-700 border-yellow-200"
+                              : userKpiCount === 3
+                              ? "bg-green-100 text-green-700 border-green-200"
+                              : "bg-yellow-100 text-yellow-700 border-yellow-200"
+                          }`}
                           onClick={(e) => {
                             e.stopPropagation();
                             toggleExpanded(u.id);
@@ -1558,11 +1553,8 @@ export default function TeamPage() {
                           {userKpiCount}
                         </Badge>
                       </TableCell>
-                      <TableCell>
-                        <InviteStatusBadge
-                          user={u}
-                          inviterName={u.invited_by ? userNameMap[u.invited_by] : undefined}
-                        />
+                      <TableCell className="w-12 text-center">
+                        <StatusDot user={u} />
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -1882,9 +1874,8 @@ export default function TeamPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="org_admin">Org Admin</SelectItem>
-                  <SelectItem value="information_officer">Info Officer</SelectItem>
-                  <SelectItem value="dirigente">Dirigente</SelectItem>
+                  <SelectItem value="org_admin">Admin</SelectItem>
+                  <SelectItem value="dirigente">User</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1991,9 +1982,8 @@ export default function TeamPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="org_admin">Org Admin</SelectItem>
-                  <SelectItem value="information_officer">Info Officer</SelectItem>
-                  <SelectItem value="dirigente">Dirigente</SelectItem>
+                  <SelectItem value="org_admin">Admin</SelectItem>
+                  <SelectItem value="dirigente">User</SelectItem>
                 </SelectContent>
               </Select>
             </div>
