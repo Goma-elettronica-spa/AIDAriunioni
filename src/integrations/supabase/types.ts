@@ -1200,6 +1200,7 @@ export type Database = {
           reviewed_by: string | null
           reviewed_value_amount: number | null
           reviewed_value_unit: string | null
+          source: string
           status: string
           tenant_id: string
           title: string
@@ -1224,6 +1225,7 @@ export type Database = {
           reviewed_by?: string | null
           reviewed_value_amount?: number | null
           reviewed_value_unit?: string | null
+          source?: string
           status?: string
           tenant_id: string
           title: string
@@ -1248,6 +1250,7 @@ export type Database = {
           reviewed_by?: string | null
           reviewed_value_amount?: number | null
           reviewed_value_unit?: string | null
+          source?: string
           status?: string
           tenant_id?: string
           title?: string

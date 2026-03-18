@@ -1,0 +1,1 @@
+ALTER TABLE public.upgrade_requests ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual';
