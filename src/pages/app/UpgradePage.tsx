@@ -365,7 +365,7 @@ export default function UpgradePage() {
     queryFn: async () => {
       const { data, error } = await (supabase.from as any)("upgrade_requests")
         .select(
-          "id, tenant_id, meeting_id, created_by_user_id, owner_user_id, title, description, linked_kpi_id, reason_why, value_unit, value_amount, reviewed_value_unit, reviewed_value_amount, reviewed_by, reviewed_at, review_note, status, position, created_at, updated_at, attachment_url, attachment_name"
+          "id, tenant_id, meeting_id, created_by_user_id, owner_user_id, title, description, linked_kpi_id, reason_why, value_unit, value_amount, reviewed_value_unit, reviewed_value_amount, reviewed_by, reviewed_at, review_note, status, position, created_at, updated_at, attachment_url, attachment_name, source"
         )
         .eq("tenant_id", tenantId!);
       if (error) throw error;
