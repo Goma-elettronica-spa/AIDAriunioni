@@ -1,9 +1,11 @@
+import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import RoleGuard from "@/components/RoleGuard";
 import Login from "@/pages/Login";
@@ -12,38 +14,54 @@ import ResetPassword from "@/pages/ResetPassword";
 import NotFound from "@/pages/NotFound";
 import RootRoute from "@/pages/RootRoute";
 
-import SuperadminLayout from "@/layouts/SuperadminLayout";
-import SuperadminDashboard from "@/pages/superadmin/Dashboard";
-import Tenants from "@/pages/superadmin/Tenants";
-import TenantDetail from "@/pages/superadmin/TenantDetail";
-import PermissionsPage from "@/pages/superadmin/Permissions";
-import AnalyticsPage from "@/pages/superadmin/Analytics";
-import SuperadminAuditLog from "@/pages/superadmin/AuditLog";
+const SuperadminLayout = lazy(() => import("@/layouts/SuperadminLayout"));
+const SuperadminDashboard = lazy(() => import("@/pages/superadmin/Dashboard"));
+const Tenants = lazy(() => import("@/pages/superadmin/Tenants"));
+const TenantDetail = lazy(() => import("@/pages/superadmin/TenantDetail"));
+const PermissionsPage = lazy(() => import("@/pages/superadmin/Permissions"));
+const AnalyticsPage = lazy(() => import("@/pages/superadmin/Analytics"));
+const SuperadminAuditLog = lazy(() => import("@/pages/superadmin/AuditLog"));
 
-import AppLayout from "@/layouts/AppLayout";
-import DashboardPage from "@/pages/app/DashboardPage";
-import MeetingsPage from "@/pages/app/MeetingsPage";
-import PreMeetingPage from "@/pages/app/PreMeetingPage";
-import MeetingDetailPage from "@/pages/app/MeetingDetailPage";
-import BoardPage from "@/pages/app/BoardPage";
-import TeamPage from "@/pages/app/TeamPage";
-import AuditLogPage from "@/pages/app/AuditLogPage";
-import BriefPage from "@/pages/app/BriefPage";
-import KpiPage from "@/pages/app/KpiPage";
-import BoardRolesPage from "@/pages/app/BoardRolesPage";
-import UpgradePage from "@/pages/app/UpgradePage";
-import SupportPage from "@/pages/app/SupportPage";
+const AppLayout = lazy(() => import("@/layouts/AppLayout"));
+const DashboardPage = lazy(() => import("@/pages/app/DashboardPage"));
+const MeetingsPage = lazy(() => import("@/pages/app/MeetingsPage"));
+const PreMeetingPage = lazy(() => import("@/pages/app/PreMeetingPage"));
+const MeetingDetailPage = lazy(() => import("@/pages/app/MeetingDetailPage"));
+const BoardPage = lazy(() => import("@/pages/app/BoardPage"));
+const TeamPage = lazy(() => import("@/pages/app/TeamPage"));
+const AuditLogPage = lazy(() => import("@/pages/app/AuditLogPage"));
+const BriefPage = lazy(() => import("@/pages/app/BriefPage"));
+const KpiPage = lazy(() => import("@/pages/app/KpiPage"));
+const BoardRolesPage = lazy(() => import("@/pages/app/BoardRolesPage"));
+const UpgradePage = lazy(() => import("@/pages/app/UpgradePage"));
+const SupportPage = lazy(() => import("@/pages/app/SupportPage"));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+const PageLoader = () => (
+  <div className="flex min-h-screen items-center justify-center">
+    <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+  </div>
+);
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
             <Route path="/" element={<RootRoute />} />
             <Route path="/login" element={<Login />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
@@ -113,11 +131,13 @@ const App = () => (
             </Route>
 
             <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+              </Routes>
+            </Suspense>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;
