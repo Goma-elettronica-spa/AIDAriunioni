@@ -2,6 +2,7 @@ import { Outlet, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { LayoutDashboard, Building2, LogOut, Menu, ShieldCheck, BarChart3, Eye } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
+import Logo from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/layout/NotificationBell";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -53,7 +54,7 @@ export default function SuperadminLayout() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-5 py-5 border-b border-primary-foreground/10">
-        <h2 className="text-sm font-semibold tracking-wide">Riunioni in Cloud</h2>
+        <Logo size="sm" />
         <p className="text-xs text-primary-foreground/60 mt-0.5">Superadmin</p>
       </div>
 
@@ -111,10 +112,10 @@ export default function SuperadminLayout() {
           >
             <Menu className="h-5 w-5" />
           </Button>
-          <h1 className="text-sm font-medium text-foreground truncate">
-            <span className="hidden sm:inline">Riunioni in Cloud — </span>
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground truncate">
+            <Logo size="sm" className="hidden sm:flex" />
             <span className="text-muted-foreground">Superadmin</span>
-          </h1>
+          </div>
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
             {user && (
               <NotificationBell userId={user.id} tenantId={user.tenant_id} />

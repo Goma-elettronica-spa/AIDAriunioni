@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Menu, X, ArrowRight } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
@@ -12,8 +12,9 @@ function Navbar() {
   return (
     <nav className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border">
       <div className="max-w-[1200px] mx-auto flex items-center justify-between px-6 h-16">
-        <Link to="/" className="text-lg font-semibold text-foreground tracking-tight">
-          Riunioni in Cloud
+        <Link to="/" className="flex items-center gap-2.5">
+          <div className="h-8 w-8 flex items-center justify-center rounded-md bg-foreground text-background font-bold text-sm">R</div>
+          <span className="text-lg font-semibold text-foreground tracking-tight">Riunioni in Cloud</span>
         </Link>
 
         {/* Desktop */}
@@ -60,7 +61,6 @@ function Hero() {
           <Link to="/login">
             <Button className="h-12 px-8 text-base bg-foreground text-background hover:bg-foreground/90">
               Inizia ora
-              <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </Link>
           <span className="text-sm text-muted-foreground">Nessuna carta di credito richiesta</span>
@@ -231,7 +231,6 @@ function FinalCta() {
           <Link to="/login">
             <Button className="h-12 px-8 text-base bg-foreground text-background hover:bg-foreground/90">
               Inizia ora
-              <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </Link>
           <span className="text-sm text-muted-foreground">Nessuna carta di credito richiesta</span>

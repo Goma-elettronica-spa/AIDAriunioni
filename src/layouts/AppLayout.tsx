@@ -15,6 +15,7 @@ import {
   LifeBuoy,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
+import Logo from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { NotificationBell } from "@/components/layout/NotificationBell";
@@ -64,9 +65,7 @@ export default function AppLayout() {
     <div className="flex flex-col h-full bg-background border-r border-border">
       {/* Header */}
       <div className="px-6 py-5 border-b border-border">
-        <h2 className="text-sm font-semibold text-foreground tracking-wide">
-          Riunioni in Cloud
-        </h2>
+        <Logo size="sm" />
       </div>
 
       {/* Nav */}

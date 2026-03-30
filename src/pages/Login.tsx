@@ -361,9 +361,10 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <Card className="w-full max-w-sm border border-border shadow-sm">
         <CardHeader className="text-center pb-2 pt-8">
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            Riunioni in Cloud
-          </h1>
+          <div className="flex items-center justify-center gap-2.5">
+            <div className="h-9 w-9 flex items-center justify-center rounded-md bg-foreground text-background font-bold text-base">R</div>
+            <span className="text-xl font-semibold tracking-tight text-foreground">Riunioni in Cloud</span>
+          </div>
           <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
         </CardHeader>
         <CardContent className="pt-4 pb-8">
