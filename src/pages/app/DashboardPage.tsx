@@ -22,6 +22,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
+import AiCopilotCard from "@/components/ai/AiCopilotCard";
+import AiSuggestedKpis from "@/components/ai/AiSuggestedKpis";
 
 const roleLabels: Record<string, string> = {
   org_admin: "Admin",
@@ -911,6 +913,12 @@ export default function DashboardPage() {
             })}
           </div>
         )}
+      </div>
+
+      {/* AI Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <AiCopilotCard meetingId={meeting?.id} />
+        {user?.role === "org_admin" && <AiSuggestedKpis />}
       </div>
     </div>
   );

@@ -13,7 +13,9 @@ import AuthCallback from "@/pages/AuthCallback";
 import ResetPassword from "@/pages/ResetPassword";
 import NotFound from "@/pages/NotFound";
 import RootRoute from "@/pages/RootRoute";
+import OnboardingGuard from "@/components/OnboardingGuard";
 
+const OnboardingPage = lazy(() => import("@/pages/app/OnboardingPage"));
 const SuperadminLayout = lazy(() => import("@/layouts/SuperadminLayout"));
 const SuperadminDashboard = lazy(() => import("@/pages/superadmin/Dashboard"));
 const Tenants = lazy(() => import("@/pages/superadmin/Tenants"));
@@ -67,6 +69,18 @@ const App = () => (
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/auth/reset-password" element={<ResetPassword />} />
 
+            {/* Onboarding (org_admin first login) */}
+            <Route
+              path="/onboarding"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard allowed={["org_admin"]}>
+                    <OnboardingPage />
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+
             {/* Superadmin routes */}
             <Route
               element={
@@ -90,7 +104,9 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <RoleGuard allowed={["org_admin", "information_officer", "dirigente"]}>
-                    <AppLayout />
+                    <OnboardingGuard>
+                      <AppLayout />
+                    </OnboardingGuard>
                   </RoleGuard>
                 </ProtectedRoute>
               }
