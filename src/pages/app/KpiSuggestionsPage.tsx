@@ -43,6 +43,7 @@ interface SuggestedKpi {
   direction: string;
   target_value: number | null;
   ai_rationale: string | null;
+  ai_priority: number | null;
   suggestion_source: string | null;
   functional_area_id: string | null;
   functional_areas?: { id: string; name: string } | null;
@@ -222,13 +223,16 @@ export default function KpiSuggestionsPage() {
     );
   }
 
-  // Group by functional area
+  // Group by functional area, sorted by priority within each group
   const grouped = suggestions.reduce<Record<string, SuggestedKpi[]>>((acc, kpi) => {
     const areaName = kpi.functional_areas?.name || "Azienda";
     if (!acc[areaName]) acc[areaName] = [];
     acc[areaName].push(kpi);
     return acc;
   }, {});
+  for (const kpis of Object.values(grouped)) {
+    kpis.sort((a, b) => (a.ai_priority ?? 99) - (b.ai_priority ?? 99));
+  }
 
   const allIds = suggestions.map((k) => k.id);
 
@@ -282,6 +286,11 @@ export default function KpiSuggestionsPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
+                          {kpi.ai_priority && (
+                            <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-foreground text-background text-xs font-bold shrink-0">
+                              {kpi.ai_priority}
+                            </span>
+                          )}
                           <p className="text-sm font-medium">{kpi.name}</p>
                           <Badge variant="outline" className="text-xs">{kpi.unit}</Badge>
                           {kpi.direction === "up_is_good" ? (

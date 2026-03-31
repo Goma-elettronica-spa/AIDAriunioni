@@ -254,17 +254,14 @@ export default function BoardRolesPage() {
 
   const deleteAreaMutation = useMutation({
     mutationFn: async (id: string) => {
-      try {
-        await supabase
-          .from("kpi_definitions")
-          .update({ functional_area_id: null })
-          .eq("functional_area_id", id);
-        await (supabase.from as any)("user_functional_areas")
-          .delete()
-          .eq("functional_area_id", id);
-      } catch (_) {
-        console.warn("Cleanup before area delete had non-critical errors");
-      }
+      // Detach all FK references before deleting the area
+      await Promise.all([
+        supabase.from("kpi_definitions").update({ functional_area_id: null } as any).eq("functional_area_id", id),
+        supabase.from("board_roles" as any).update({ functional_area_id: null }).eq("functional_area_id", id),
+        supabase.from("users").update({ functional_area_id: null } as any).eq("functional_area_id", id),
+        supabase.from("slide_uploads" as any).update({ functional_area_id: null }).eq("functional_area_id", id),
+        (supabase.from as any)("user_functional_areas").delete().eq("functional_area_id", id),
+      ]);
       const { error } = await (supabase.from as any)("functional_areas")
         .delete()
         .eq("id", id);

@@ -55,13 +55,14 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 8000,
-        system: `Sei un consulente strategico esperto in KPI aziendali italiane.
+        max_tokens: 16000,
+        system: `Sei un consulente strategico per CEO di aziende italiane medio-grandi.
 Suggerisci KPI concrete, misurabili e rilevanti per riunioni CdA mensili.
 Ogni KPI deve avere un target realistico basato sul settore e dimensione dell'azienda.
 Ogni KPI DEVE essere assegnata a un'area funzionale specifica tra quelle fornite.
-Suggerisci 2 KPI per ogni area funzionale.
-Rispondi SOLO con JSON valido, nessun testo aggiuntivo. Sii conciso nelle description e rationale (max 1 riga).`,
+Suggerisci esattamente 5 KPI per ogni area funzionale, ordinate dalla più importante alla meno importante.
+Per ogni KPI, il campo "rationale" deve spiegare al CEO perché dovrebbe monitorare questa metrica: quale decisione strategica informa, quale rischio previene, quale opportunità rivela.
+Rispondi SOLO con JSON valido, nessun testo aggiuntivo.`,
         messages: [
           {
             role: "user",
@@ -77,17 +78,18 @@ AREE FUNZIONALI DISPONIBILI (usa questi nomi ESATTI):
 ${areaNames.map((n: string) => `- ${n}`).join("\n")}
 ${financialContext}
 
-Rispondi con questo formato JSON:
+Rispondi con questo formato JSON. Per ogni area fornisci esattamente 5 KPI ordinate dalla #1 (più critica per il CEO) alla #5:
 {
   "kpis": [
     {
       "name": "Nome KPI",
-      "description": "Cosa misura e perché è importante",
+      "description": "Cosa misura",
       "unit": "EUR" | "%" | "giorni" | "numero" | "ore",
       "direction": "up" | "down",
       "target_value": 123,
       "functional_area": "Nome esatto dell'area funzionale",
-      "rationale": "Perché questa KPI è rilevante per questa azienda specifica"
+      "priority": 1,
+      "rationale": "Perché il CEO dovrebbe monitorare questa KPI: quale decisione informa, quale rischio previene, quale opportunità rivela"
     }
   ]
 }`,
@@ -122,6 +124,7 @@ Rispondi con questo formato JSON:
       is_company_wide: false,
       functional_area_id: areaMap[kpi.functional_area] || null,
       ai_suggested: true,
+      ai_priority: kpi.priority || null,
       suggestion_source: financialContext ? "bilancio" : "onboarding",
       ai_rationale: kpi.rationale,
     }));
