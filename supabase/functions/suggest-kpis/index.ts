@@ -55,13 +55,13 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 4000,
+        max_tokens: 8000,
         system: `Sei un consulente strategico esperto in KPI aziendali italiane.
 Suggerisci KPI concrete, misurabili e rilevanti per riunioni CdA mensili.
 Ogni KPI deve avere un target realistico basato sul settore e dimensione dell'azienda.
 Ogni KPI DEVE essere assegnata a un'area funzionale specifica tra quelle fornite.
-Suggerisci almeno 2 KPI per ogni area funzionale, fino a un massimo di 3-4 per le aree più critiche.
-Rispondi SOLO con JSON valido, nessun testo aggiuntivo.`,
+Suggerisci 2 KPI per ogni area funzionale.
+Rispondi SOLO con JSON valido, nessun testo aggiuntivo. Sii conciso nelle description e rationale (max 1 riga).`,
         messages: [
           {
             role: "user",
