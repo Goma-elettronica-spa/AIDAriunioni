@@ -10,6 +10,7 @@ import {
   Loader2,
   X,
   Plus,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -222,12 +223,13 @@ export default function CompanySettingsPage() {
     const data = tenantQuery.data?.org_chart_data;
     if (!data) return [];
 
-    // Expect org_chart_data to have a departments array or similar structure
+    // Expect org_chart_data to have a departments array with nested teams
     if (Array.isArray(data.departments)) {
       return data.departments.map((d: any) => ({
         name: d.name ?? d.department ?? "-",
         head: d.head ?? d.manager ?? "-",
-        count: d.count ?? d.headcount ?? d.people ?? 0,
+        count: d.count ?? d.headcount ?? d.people ??
+          (Array.isArray(d.teams) ? d.teams.reduce((s: number, t: any) => s + (t.headcount ?? t.count ?? 0), 0) : 0),
       }));
     }
 
@@ -547,6 +549,39 @@ export default function CompanySettingsPage() {
               </div>
             </div>
           )}
+
+          {/* Alignment check: org chart vs functional areas */}
+          {orgChartRows.length > 0 && (areasQuery.data ?? []).length > 0 && (() => {
+            const areaNames = (areasQuery.data ?? []).map((a: any) => a.name);
+            const orgNames = orgChartRows.map((r: any) => r.name);
+            const inOrgNotInAreas = orgNames.filter((n: string) => !areaNames.some((a: string) => a.toLowerCase() === n.toLowerCase()));
+            const inAreasNotInOrg = areaNames.filter((n: string) => !orgNames.some((o: string) => o.toLowerCase() === n.toLowerCase()));
+            if (inOrgNotInAreas.length === 0 && inAreasNotInOrg.length === 0) return null;
+            return (
+              <div className="rounded-md border border-dashed p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-sm font-medium">Organigramma e Aree Funzionali non sono allineati</p>
+                </div>
+                {inAreasNotInOrg.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium">Aree funzionali senza corrispondenza in organigramma:</span>{" "}
+                    {inAreasNotInOrg.join(", ")}
+                    {" — "}considera di rinominarle o eliminarle in{" "}
+                    <a href="/board-roles" className="underline">Organizational Chart</a>
+                  </p>
+                )}
+                {inOrgNotInAreas.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium">Dipartimenti organigramma senza area funzionale:</span>{" "}
+                    {inOrgNotInAreas.join(", ")}
+                    {" — "}considera di creare le aree corrispondenti in{" "}
+                    <a href="/board-roles" className="underline">Organizational Chart</a>
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Save button */}
           <div className="flex items-center justify-end pt-2">
