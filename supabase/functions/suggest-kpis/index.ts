@@ -22,7 +22,7 @@ serve(async (req) => {
 
     const { data: tenant } = await sb
       .from("tenants")
-      .select("name, sector_ateco, sector_description, employee_range, revenue_range, challenges")
+      .select("name, sector_ateco, sector_description, employee_count, revenue_millions, employee_range, revenue_range, challenges")
       .eq("id", tenant_id)
       .single();
 
@@ -61,8 +61,8 @@ Rispondi SOLO con JSON valido, nessun testo aggiuntivo.`,
 
 AZIENDA: ${tenant.name}
 SETTORE: ${tenant.sector_description || tenant.sector_ateco || "Non specificato"}
-DIPENDENTI: ${tenant.employee_range || "Non specificato"}
-FATTURATO: ${tenant.revenue_range || "Non specificato"}
+DIPENDENTI: ${tenant.employee_count ? tenant.employee_count + " persone" : tenant.employee_range || "Non specificato"}
+FATTURATO: ${tenant.revenue_millions ? tenant.revenue_millions + " milioni €" : tenant.revenue_range || "Non specificato"}
 SFIDE PRINCIPALI: ${(tenant.challenges || []).join(", ") || "Non specificate"}${financialContext}
 
 Rispondi con questo formato JSON:

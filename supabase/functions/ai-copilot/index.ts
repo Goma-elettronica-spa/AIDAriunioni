@@ -29,7 +29,7 @@ serve(async (req) => {
     // ── Gather context ──────────────────────────────────────────
     const [userRes, tenantRes, kpiRes, tasksRes, commitmentsRes, meetingRes] = await Promise.all([
       sb.from("users").select("full_name, job_title, role").eq("id", user_id).single(),
-      sb.from("tenants").select("name, sector_ateco, sector_description, challenges, employee_range, revenue_range").eq("id", tenant_id).single(),
+      sb.from("tenants").select("name, sector_ateco, sector_description, challenges, employee_count, revenue_millions, employee_range, revenue_range").eq("id", tenant_id).single(),
       sb.from("kpi_entries").select(`
         current_value, previous_value, delta, delta_percent, is_improved,
         kpi_definitions!inner(name, unit, direction, target_value)
@@ -57,7 +57,7 @@ serve(async (req) => {
 
     // ── Build role-specific prompt ──────────────────────────────
     const contextBlock = `
-AZIENDA: ${tenant?.name} | Settore: ${tenant?.sector_description || tenant?.sector_ateco || "N/A"} | Dipendenti: ${tenant?.employee_range || "N/A"} | Fatturato: ${tenant?.revenue_range || "N/A"}
+AZIENDA: ${tenant?.name} | Settore: ${tenant?.sector_description || tenant?.sector_ateco || "N/A"} | Dipendenti: ${tenant?.employee_count ? tenant.employee_count + " persone" : tenant?.employee_range || "N/A"} | Fatturato: ${tenant?.revenue_millions ? tenant.revenue_millions + " M€" : tenant?.revenue_range || "N/A"}
 SFIDE: ${(tenant?.challenges || []).join(", ") || "N/A"}
 
 UTENTE: ${user?.full_name} | Ruolo: ${user?.job_title || user?.role}

@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,8 +36,6 @@ const SECTORS = [
   { code: "S", label: "Altri servizi" },
 ];
 
-const EMPLOYEE_RANGES = ["1-10", "11-50", "51-200", "201-500", "500+"];
-const REVENUE_RANGES = ["< 1M €", "1-5M €", "5-10M €", "10-50M €", "50M+ €"];
 
 const CHALLENGES = [
   "Marginalità in calo",
@@ -60,14 +60,15 @@ interface StepProps {
 export default function OnboardingPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
 
   // Form state
   const [sector, setSector] = useState("");
   const [sectorDesc, setSectorDesc] = useState("");
-  const [employeeRange, setEmployeeRange] = useState("");
-  const [revenueRange, setRevenueRange] = useState("");
+  const [employeeCount, setEmployeeCount] = useState("");
+  const [revenueMillions, setRevenueMillions] = useState("");
   const [challenges, setChallenges] = useState<string[]>([]);
   const [customChallenge, setCustomChallenge] = useState("");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -118,8 +119,8 @@ export default function OnboardingPage() {
         .update({
           sector_ateco: sector,
           sector_description: sectorDesc,
-          employee_range: employeeRange,
-          revenue_range: revenueRange,
+          employee_count: parseInt(employeeCount, 10),
+          revenue_millions: parseFloat(revenueMillions),
           challenges,
           onboarding_completed_at: new Date().toISOString(),
         } as any)
@@ -133,6 +134,9 @@ export default function OnboardingPage() {
       supabase.functions.invoke("suggest-kpis", {
         body: { tenant_id: user.tenant_id },
       }).catch(() => {});
+
+      // Invalidate the onboarding query so OnboardingGuard sees the updated state
+      await queryClient.invalidateQueries({ queryKey: ["tenant-onboarding"] });
 
       toast.success("Onboarding completato! Le KPI AI stanno arrivando...");
       navigate("/dashboard", { replace: true });
@@ -175,7 +179,7 @@ export default function OnboardingPage() {
   const StepIcon = currentStep.icon;
   const canNext =
     step === 0 ? sector !== "" :
-    step === 1 ? employeeRange !== "" && revenueRange !== "" :
+    step === 1 ? employeeCount !== "" && revenueMillions !== "" :
     step === 2 ? challenges.length >= 1 :
     true;
 
@@ -232,11 +236,13 @@ export default function OnboardingPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Descrizione attività (opzionale)</Label>
-                  <Input
-                    placeholder="es. Produzione componenti elettronici per automotive"
+                  <Label>Descrivi la tua azienda</Label>
+                  <Textarea
+                    placeholder="Raccontaci cosa fa la tua azienda, quali prodotti o servizi offrite, chi sono i vostri clienti principali, e in quali mercati operate. Più dettagli ci dai, più le KPI suggerite saranno rilevanti."
                     value={sectorDesc}
                     onChange={(e) => setSectorDesc(e.target.value)}
+                    rows={5}
+                    className="resize-none"
                   />
                 </div>
               </div>
@@ -247,29 +253,27 @@ export default function OnboardingPage() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Numero dipendenti</Label>
-                  <Select value={employeeRange} onValueChange={setEmployeeRange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleziona range..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EMPLOYEE_RANGES.map((r) => (
-                        <SelectItem key={r} value={r}>{r}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="es. 45"
+                    value={employeeCount}
+                    onChange={(e) => setEmployeeCount(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label>Fatturato annuo</Label>
-                  <Select value={revenueRange} onValueChange={setRevenueRange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleziona range..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {REVENUE_RANGES.map((r) => (
-                        <SelectItem key={r} value={r}>{r}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Fatturato annuo (milioni di euro)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    placeholder="es. 12.5"
+                    value={revenueMillions}
+                    onChange={(e) => setRevenueMillions(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Inserisci il valore in milioni di euro (es. 12.5 = 12,5 M€)
+                  </p>
                 </div>
               </div>
             )}
@@ -348,11 +352,11 @@ export default function OnboardingPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Dipendenti</span>
-                    <span className="font-medium">{employeeRange}</span>
+                    <span className="font-medium">{employeeCount}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Fatturato</span>
-                    <span className="font-medium">{revenueRange}</span>
+                    <span className="font-medium">{revenueMillions} M€</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Sfide</span>
