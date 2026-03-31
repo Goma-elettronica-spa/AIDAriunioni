@@ -34,6 +34,7 @@ const TeamPage = lazy(() => import("@/pages/app/TeamPage"));
 const AuditLogPage = lazy(() => import("@/pages/app/AuditLogPage"));
 const BriefPage = lazy(() => import("@/pages/app/BriefPage"));
 const KpiPage = lazy(() => import("@/pages/app/KpiPage"));
+const KpiSuggestionsPage = lazy(() => import("@/pages/app/KpiSuggestionsPage"));
 const BoardRolesPage = lazy(() => import("@/pages/app/BoardRolesPage"));
 const UpgradePage = lazy(() => import("@/pages/app/UpgradePage"));
 const SupportPage = lazy(() => import("@/pages/app/SupportPage"));
@@ -113,6 +114,7 @@ const App = () => (
             >
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/kpi" element={<KpiPage />} />
+              <Route path="/kpi/suggestions" element={<KpiSuggestionsPage />} />
               <Route path="/meetings" element={<MeetingsPage />} />
               <Route path="/meetings/:id/pre-meeting" element={<PreMeetingPage />} />
               <Route path="/meetings/:id/brief" element={<BriefPage />} />
