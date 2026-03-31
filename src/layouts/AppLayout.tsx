@@ -13,6 +13,7 @@ import {
   Network,
   Lightbulb,
   LifeBuoy,
+  Building2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import Logo from "@/components/Logo";
@@ -28,6 +29,7 @@ const allNavItems = [
   { title: "TO DOs", url: "/board", icon: Columns3, roles: ["org_admin", "information_officer", "dirigente"] as string[] },
   { title: "Upgrade", url: "/upgrade", icon: Lightbulb, roles: null },
   { title: "Team", url: "/team", icon: Users, roles: ["org_admin"] as string[] },
+  { title: "Azienda", url: "/company", icon: Building2, roles: ["org_admin"] as string[] },
   { title: "Organizational Chart", url: "/board-roles", icon: Network, roles: ["org_admin"] as string[] },
   { title: "Audit Log", url: "/audit-log", icon: ShieldCheck, roles: ["org_admin", "information_officer"] as string[] },
   { title: "Support", url: "/support", icon: LifeBuoy, roles: null },
